@@ -31,9 +31,14 @@ Write-Host "==============================================" -ForegroundColor Cya
 Write-Host ""
 
 # ---- Step 1: Ensure folders exist on Pi ----
+# Mirror every subfolder under local src/ so new modules (e.g. src/calendar)
+# don't fail with "No such file or directory" on first sync.
 Write-Host "[1/3] Ensuring remote folders exist..." -ForegroundColor Yellow
-ssh $pi "mkdir -p $proj_remote/src/ui $proj_remote/src/assets $proj_remote/src/lib"
-Write-Host "      OK" -ForegroundColor Green
+$src_dirs = Get-ChildItem -Path "$proj_local\src" -Recurse -Directory -ErrorAction SilentlyContinue |
+    ForEach-Object { ($_.FullName.Substring($proj_local.Length + 1) -replace '\\','/') }
+$mkdir_args = @("$proj_remote/src") + ($src_dirs | ForEach-Object { "$proj_remote/$_" })
+ssh $pi "mkdir -p $($mkdir_args -join ' ')"
+Write-Host "      OK ($($src_dirs.Count + 1) folders)" -ForegroundColor Green
 Write-Host ""
 
 # ---- Step 2: Build file list (recursive, exclude unwanted) ----
