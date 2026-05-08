@@ -1,7 +1,7 @@
 ﻿# Digital Calendar Pi — Project Context
 
 > **Single source of truth** for the Pi Zero W Digital Calendar project.
-> Last updated: **May 8, 2026** (Phase 2.2.2 complete)
+> Last updated: **May 9, 2026** (Phase 2.2.3 complete)
 
 ---
 
@@ -27,8 +27,9 @@ A wall-mounted Thai Buddhist calendar display running on Raspberry Pi Zero W wit
 | OS | Raspberry Pi OS Lite Trixie 32-bit (kernel 6.12.75) |
 | Hostname | `digitalcal-pi` |
 | User | `thanat` |
-| IP (DHCP) | `192.168.0.232` (LEnet WiFi) |
+| IP (DHCP) | `192.168.0.232` (LEnet WiFi @ office) / `192.168.1.107` (eth0 USB adapter @ home) / `192.168.1.106` (wlan0 @ home) |
 | PSU | 2A+ adapter (vcgencmd get_throttled = 0x0) |
+| USB Ethernet | USB-OTG → RJ45 adapter (workaround for home WiFi issues — see §9) |
 
 ---
 
@@ -74,6 +75,10 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 │   │   ├── mini_calendar.h              (API: mini_calendar_build)
 │   │   └── mini_calendar.cpp            (7x6 grid, today highlight, Thai labels)
 │   │
+│   ├── calendar/                        (Phase 2.2.3 — Thai lunar math)
+│   │   ├── thai_calendar.h              (5.3 KB — public API, lunar/zodiac types)
+│   │   └── thai_calendar.cpp            (16.1 KB, 454 lines — pure math, ported verbatim from ESP32)
+│   │
 │   ├── assets/                          (Phase 2.2.2)
 │   │   ├── thai_sarabun_24.c            (124 KB, 3123 lines — LVGL font, supports v9)
 │   │   ├── thai_fonts.h                 (LV_FONT_DECLARE wrapper)
@@ -104,8 +109,8 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 | **2.2.1** Mini Calendar skeleton | DONE | May 8 | 7x6 grid, today highlight, English labels, hardcoded May 2569 |
 | **2.2.2** Thai Font + labels | DONE | May 8 | thai_sarabun_24 ported, Thai month/weekday strings |
 | 2.2.2-OPT Strip lv_conf | REVERTED | May 8 | Black screen — see Section 9 |
-| 2.2.3 Thai calendar logic | PENDING | — | Lunar, Buddhist year, holiday detection (port thai_calendar.cpp) |
-| 2.2.4 Real time | PENDING | — | Linux time(), auto-refresh at midnight |
+| **2.2.3** Thai calendar logic | DONE | May 9 | Ported `thai_calendar.{h,cpp}` verbatim from ESP32. Self-test on Pi verified all 6 reference dates match myhora.com (lunar/zodiac/leap year). Git initialised. |
+| 2.2.4 Real time | IN PROGRESS | May 9 | Linux time(), replace mini_calendar hardcodes |
 | 2.2.5 Tulip background | PENDING | — | bg_tulip.c image, translucent cards |
 | 2.2.6 Header | PENDING | — | Weekday + date + clock + wanphra |
 | 2.2.7 Weather card | PENDING | — | OpenWeather API, libcurl |
@@ -115,18 +120,25 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 
 ---
 
-## 6. Working Features (Phase 2.2.2)
+## 6. Working Features (Phase 2.2.3)
 
 - Theme system — Dark navy palette, color macros (`C_BG_PRIMARY`, `C_ACCENT`, etc.)
 - Layout tokens — 1280x720 native (scaled 1.5x from ESP32 800x480)
 - Mini Calendar widget
   - Card with cyan border, navy background, radius 16
-  - Title `"พฤษภาคม 2569"` (Thai month + Buddhist year)
+  - Title `"พฤษภาคม 2569"` (Thai month + Buddhist year — currently hardcoded; 2.2.4 makes real)
   - Nav buttons `<` `🏠` `>` (visual only, no click handler)
   - DOW headers `อา จ อ พ พฤ ศ ส` (Thai short weekdays)
   - 7x6 day grid (1-31), Sun/Sat = pink (`#FF7A8C`), weekdays = white
   - Today (8) = cyan filled rounded box, dark navy text
   - Legend `[*] today [.] event [.] holiday`
+- **Thai lunar calendar logic** (Phase 2.2.3) — pure math layer, not yet wired to UI
+  - `thai_calendar_from_date(y, m, d)` → `thai_lunar_t {waxing, day, month, leap_month, year_ce, zodiac_idx, valid}`
+  - `thai_calendar_is_buddhist_day()` — waxing 8/15, waning 8, end-of-month
+  - `thai_calendar_holiday_en()` — Magha/Visakha/Asalha/Khao Phansa/Ok Phansa (with leap-year shifts)
+  - `thai_calendar_fixed_holiday_en()` — Gregorian-fixed Thai holidays (Songkran, Chakri, etc.)
+  - `thai_calendar_zodiac_th/en()` — 12-year cycle from year_ce
+  - Coverage: 2025–2031 (m5_day1 epochs verified vs myhora.com)
 - Performance: 30 FPS, CPU 4%, render 2 ms — Pi Zero W has plenty of headroom
 
 ---
@@ -208,15 +220,63 @@ alias calhealth='vcgencmd get_throttled; vcgencmd measure_temp; uptime'
 - **Pi Zero W rejects new SSH connections during heavy compile** — always use tmux for long builds.
 - **Mouse scroll inside tmux** prints ASCII garbage but does not affect the build.
 
+### Phase 2.2.3 lessons (May 9) — Home WiFi network debugging
+
+The Phase 2.2.3 build attempt at home consumed ~1 hour of network debugging
+before a workable path was found. Captured here so future sessions skip it.
+
+**Symptoms:** ssh from Windows → Pi via WiFi failed at "banner exchange:
+Connection to UNKNOWN port -1: Connection refused". Verbose ssh showed
+TCP "Connection established" + "getpeername failed" — three-way handshake
+appeared to complete from Windows kernel's view, but Pi's sshd never
+logged any connection from 192.168.1.104.
+
+**Layers that contributed (not all of them mattered, but each took time
+to rule out):**
+
+1. ProtonVPN active on Windows — TUN adapter, killswitch firewall
+2. Manual `route add 192.168.1.0 mask 255.255.255.0 192.168.1.1 metric 1`
+   (suggested while debugging VPN) — overrode the on-link route, sent LAN
+   traffic via gateway, broke direct delivery
+3. `route delete 192.168.1.0` removed not just the manual route but the
+   auto-created on-link route too — Windows ended up sending intra-LAN
+   traffic via the default gateway → AP isolation kicked in
+4. Pi sshd was disabled by default on Trixie image — needed
+   `sudo raspi-config nonint do_ssh 0`
+5. Windows network profile of `buabeam_2.4G` was Public (default for new
+   WiFi) — blocked inbound from LAN even after profile fix
+6. **Final root cause: home Wi-Fi had AP/Client Isolation or some
+   wireless-layer interference that survived all of the above.** The same
+   `buabeam_2.4G` SSID worked fine for ESP32 in earlier projects, so the
+   block is layered (TCP-specific, not ICMP).
+
+**What actually worked:** USB OTG → RJ45 adapter on the Pi, plug Ethernet
+into the home router. Pi got a separate IP on `eth0` (192.168.1.107),
+ssh worked first try. Wireless layer fully bypassed.
+
+**Decisions captured:**
+- For home builds: use Ethernet via USB-OTG adapter. WiFi is unreliable.
+- For office builds: WiFi (LEnet, 192.168.0.232) is fine.
+- Scripts now read `$env:PI_HOST` (override) → fall back to mDNS hostname
+  `digitalcal-pi.local` → so the same scripts work anywhere with one
+  env var.
+- `sync_to_pi.ps1` now auto-mirrors every subfolder under local `src/`
+  on the Pi (Phase 2.2.3 added `src/calendar/` which the previous
+  hard-coded `mkdir` missed).
+- Don't recommend manual `route add` for VPN-related issues. Either
+  disconnect VPN or use the VPN client's "Allow LAN" setting. Manual
+  routes leave artefacts that are hard to detect later.
+
 ---
 
 ## 10. Pending / Known Issues
 
 - **`src/main.cpp`** is an orphan from an earlier mistake. Not compiled (only `main.c` is in `add_executable`). Safe to delete eventually.
-- **Subtitle "Phase 2.2.2"** is hardcoded in `theme.cpp` — must update each phase manually.
-- **Today = hardcoded 8** in `mini_calendar.cpp` — fixes in Phase 2.2.4 (real time).
-- **DOW for May 1 = hardcoded 4 (Thursday)** — fixes in Phase 2.2.3 (Thai calendar logic).
-- **No Git repo yet for Pi project** — recommended before Phase 2.2.3 to enable safe revert. ESP32 repo: `thanatvipulakorn-arch/digital_calendar` (master).
+- **Subtitle "Phase 2.2.x"** is hardcoded in `theme.cpp` — must update each phase manually.
+- **Today = hardcoded 8** in `mini_calendar.cpp` — being fixed in Phase 2.2.4 (real time).
+- **DOW for May 1 = hardcoded 4 (Thursday)** — being fixed in Phase 2.2.4 (real time).
+- **Phase 2.2.3 self-test prints in `main.c`** — diagnostic output to stderr. Remove or guard once `mini_calendar` consumes thai_calendar (Phase 2.2.5+).
+- ~~**No Git repo yet for Pi project**~~ — DONE in 2.2.3 (`git init -b main`, initial commit `89f4439`). ESP32 repo: `thanatvipulakorn-arch/digital_calendar` (master).
 - **No Desktop simulator yet** — priority before Phase 2.2.5+ to make UI iteration practical.
 
 ---
@@ -275,3 +335,6 @@ When resuming work:
 - **2026-05-08** — Thai font kept at 24px only (vs ESP32's 14/24/stacked) to limit assets folder size.
 - **2026-05-08** — Aggressive lv_conf optimization deferred until Desktop simulator is available.
 - **2026-05-08** — Desktop simulator (WSL2 + LVGL PC port) is highest-ROI next infrastructure investment.
+- **2026-05-09** — Phase 2.2.3 ported `thai_calendar.{h,cpp}` verbatim (math-only, no Arduino deps). Self-test on Pi matched myhora.com for 6 reference dates → math correct.
+- **2026-05-09** — Home builds use Pi Ethernet via USB-OTG adapter. Home Wi-Fi has wireless-layer block that's not worth fighting; office (LEnet) WiFi is fine.
+- **2026-05-09** — `sync_to_pi.ps1` and `build_pi.ps1` now read `$env:PI_HOST` (override) → fall back to `digitalcal-pi.local` (mDNS).
