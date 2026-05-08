@@ -15,7 +15,12 @@
 # ================================================================
 
 $ErrorActionPreference = "Stop"
-$pi = "thanat@192.168.0.232"
+# Pi host resolution:
+#   1. Honour $env:PI_HOST when set (escape hatch for VPN / different LAN)
+#      e.g.  $env:PI_HOST = "192.168.1.172"; .\sync_to_pi.ps1
+#   2. Otherwise default to mDNS hostname digitalcal-pi.local
+$pi_host = if ($env:PI_HOST) { $env:PI_HOST } else { "digitalcal-pi.local" }
+$pi = "thanat@$pi_host"
 $proj_local = "D:\MY WORK\RASPBERRY PI PROJECT"
 $proj_remote = "~/digital_calendar_pi"
 
