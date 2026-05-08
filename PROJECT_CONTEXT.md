@@ -110,7 +110,8 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 | **2.2.2** Thai Font + labels | DONE | May 8 | thai_sarabun_24 ported, Thai month/weekday strings |
 | 2.2.2-OPT Strip lv_conf | REVERTED | May 8 | Black screen — see Section 9 |
 | **2.2.3** Thai calendar logic | DONE | May 9 | Ported `thai_calendar.{h,cpp}` verbatim from ESP32. Self-test on Pi verified all 6 reference dates match myhora.com (lunar/zodiac/leap year). Git initialised. |
-| 2.2.4 Real time | IN PROGRESS | May 9 | Linux time(), replace mini_calendar hardcodes |
+| **2.2.4** Real time | DONE | May 9 | `mini_calendar.cpp` now reads `time(NULL)` + `localtime_r()` for today/DOW/days/title. Subtitle in `theme.cpp` updated to "Phase 2.2.4 - Real Time". Visual diff verified on HDMI (today highlight moved from hardcoded 8 → 9). Midnight auto-refresh deferred. |
+| 2.2.5 Tulip background | IN PROGRESS | May 9 | bg_tulip.c image, translucent cards |
 | 2.2.5 Tulip background | PENDING | — | bg_tulip.c image, translucent cards |
 | 2.2.6 Header | PENDING | — | Weekday + date + clock + wanphra |
 | 2.2.7 Weather card | PENDING | — | OpenWeather API, libcurl |

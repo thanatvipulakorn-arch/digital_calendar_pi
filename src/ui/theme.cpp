@@ -78,9 +78,9 @@ extern "C" void build_foundation_ui(void)
     lv_obj_set_style_text_font(title, &lv_font_montserrat_36, LV_PART_MAIN);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 16);
 
-    /* Subtitle */
+    /* Subtitle — TODO: move to a central app_version.h in 2.5.x housekeeping */
     lv_obj_t *subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle, "Phase 2.2.2 - Thai Font");
+    lv_label_set_text(subtitle, "Phase 2.2.4 - Real Time");
     lv_obj_set_style_text_color(subtitle, C_ACCENT, LV_PART_MAIN);
     lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 60);

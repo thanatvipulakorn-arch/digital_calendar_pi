@@ -2,19 +2,16 @@
  * mini_calendar.cpp - Mini Calendar widget implementation
  *
  * Phase 2.2.1: Hardcoded "พฤษภาคม 2569" (May 2026)
+ * Phase 2.2.4: Reads system time — month, year (BE), today, DOW, days
+ *              are now derived from time(NULL) + localtime_r().
  *
  * Layout (within card):
  *   ┌──────────────────────────────────────────────┐
- *   │  พฤษภาคม 2569          <  🏠  >              │  Title row (40px)
+ *   │  <month>  <BE-year>     <  🏠  >             │  Title row (40px)
  *   ├──────────────────────────────────────────────┤
  *   │  อา    จ    อ    พ    พฤ    ศ    ส           │  DOW row (36px)
  *   ├──────────────────────────────────────────────┤
- *   │           1    2                              │
- *   │  3   4    5    6    7   [8]   9               │  Grid (7 rows for safety)
- *   │ 10  11   12   13   14   15   16               │
- *   │ 17  18   19   20   21   22   23               │
- *   │ 24  25   26   27   28   29   30               │
- *   │ 31                                            │
+ *   │  ...   <today highlighted in cyan>   ...     │  Grid (6 rows)
  *   └──────────────────────────────────────────────┘
  *
  * Cell size: ~85x60 px (calendar = ~700x500)
@@ -25,11 +22,55 @@
 #include "../assets/thai_fonts.h"
 #include "../assets/thai_strings.h"
 #include <cstdio>
+#include <cstdbool>
+#include <ctime>
 
-/* ──────────── Hardcoded data (Phase 2.2.1) ──────────── */
-#define HARDCODED_TODAY      8
-#define HARDCODED_DAYS       31
-#define HARDCODED_DOW_1ST    4   /* May 1, 2026 = Thursday (0=Sun, 4=Thu) */
+/* ──────────── Current-date snapshot (Phase 2.2.4) ──────────── */
+typedef struct {
+    int year_ce;       /* e.g. 2026 */
+    int year_be;       /* year_ce + 543, e.g. 2569 */
+    int month;         /* 1..12 */
+    int today;         /* 1..31 */
+    int dow_first;     /* day-of-week of the 1st (0=Sun, 6=Sat) */
+    int days_in_month; /* 28..31 */
+} cal_today_t;
+
+static bool is_gregorian_leap(int year_ce)
+{
+    return (year_ce % 4 == 0 && year_ce % 100 != 0) || (year_ce % 400 == 0);
+}
+
+static cal_today_t cal_today_snapshot(void)
+{
+    cal_today_t t;
+    time_t now = time(NULL);
+    struct tm tm_local;
+    localtime_r(&now, &tm_local);
+
+    t.year_ce = tm_local.tm_year + 1900;
+    t.year_be = t.year_ce + 543;
+    t.month   = tm_local.tm_mon + 1;
+    t.today   = tm_local.tm_mday;
+
+    /* DOW of day 1 — build a fresh tm at the 1st of the month at midday
+     * (midday avoids any DST/rounding edge), then mktime() normalises
+     * tm_wday for us. */
+    struct tm tm1 = {};
+    tm1.tm_year = tm_local.tm_year;
+    tm1.tm_mon  = tm_local.tm_mon;
+    tm1.tm_mday = 1;
+    tm1.tm_hour = 12;
+    tm1.tm_isdst = -1;
+    mktime(&tm1);
+    t.dow_first = tm1.tm_wday;   /* 0=Sun..6=Sat */
+
+    static const int dim[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    t.days_in_month = dim[t.month - 1];
+    if (t.month == 2 && is_gregorian_leap(t.year_ce)) {
+        t.days_in_month = 29;
+    }
+    return t;
+}
 
 /* ──────────── Layout tokens ──────────── */
 #define MINI_CARD_W          700
@@ -102,6 +143,10 @@ static void build_day_cell(lv_obj_t *parent, int day, int row, int col, bool is_
 /* ──────────── Public API ──────────── */
 extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
 {
+    /* Read system time once at build (Phase 2.2.4).
+     * Phase 2.2.4-MIDNIGHT will rebuild via lv_timer when the day rolls. */
+    const cal_today_t td = cal_today_snapshot();
+
     /* ── Card ── */
     lv_obj_t *card = lv_obj_create(parent);
     lv_obj_set_size(card, MINI_CARD_W, MINI_CARD_H);
@@ -115,12 +160,12 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
     /* ── Title ── */
-    /* "พฤษภาคม 2569" — Thai month name + Buddhist year */
+    /* Thai month name + Buddhist year, e.g. "พฤษภาคม 2569" */
     lv_obj_t *title = lv_label_create(card);
     char title_buf[64];
     snprintf(title_buf, sizeof(title_buf), "%s %d",
-             THAI_MONTH_FULL[5],   /* index 5 = พฤษภาคม (May) */
-             2569);
+             THAI_MONTH_FULL[td.month],   /* index 1..12 = Jan..Dec */
+             td.year_be);
     lv_label_set_text(title, title_buf);
     lv_obj_set_style_text_color(title, C_TEXT_PRIMARY, LV_PART_MAIN);
     lv_obj_set_style_text_font(title, &thai_sarabun_24, LV_PART_MAIN);
@@ -163,9 +208,9 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
 
     /* ── Day cells ── */
     int row = 0;
-    int col = HARDCODED_DOW_1ST;  /* May 1 = Thursday */
-    for (int day = 1; day <= HARDCODED_DAYS; day++) {
-        bool is_today = (day == HARDCODED_TODAY);
+    int col = td.dow_first;
+    for (int day = 1; day <= td.days_in_month; day++) {
+        bool is_today = (day == td.today);
         build_day_cell(card, day, row, col, is_today);
 
         col++;
