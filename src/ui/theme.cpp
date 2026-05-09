@@ -65,48 +65,61 @@ extern "C" void theme_init(theme_mode_t mode)
 #include "header.h"
 #include "upcoming.h"
 #include "timer_card.h"
-#include "../assets/bg_tulip.h"
+#include "../assets/bg_calendar.h"
 
-/* Native screen size — must match boards/<board>.cmake / window settings. */
-#define SCREEN_W   1280
-#define SCREEN_H   720
+/* Native screen size — Samsung 27" HDMI framebuffer is 1920x1080.
+ * If you change this, also update the default window size in main.c
+ * (configure_simulator). */
+#undef SCREEN_W   /* layout.h re-defines for the ESP32 800x480 spec */
+#undef SCREEN_H
+#define SCREEN_W   1920
+#define SCREEN_H   1080
 
-/* Layout — 1280x720 with bg_tulip behind everything.
+/* Layout — 1920x1080 with bg_calendar (1920x1080 native) behind.
+ * Generous EDGE_MARGIN (60 px) to survive Samsung TV overscan that
+ * was clipping the upcoming card off the right edge in v1.
  *
- *  ┌──────────────────────────────────────────────────────────┐
- *  │  Header (1280x100): weekday/date/lunar | clock | wanphra │
- *  ├───────────────────────────────────┬──────────────────────┤
- *  │                                   │  Upcoming holidays   │
- *  │  Mini Calendar 700x500            │  (380x340)           │
- *  │  centred under header             ├──────────────────────┤
- *  │                                   │  Timer card          │
- *  │                                   │  (380x140)           │
- *  └───────────────────────────────────┴──────────────────────┘
+ *  ┌──────────────────────────────────────────────────────────────────┐
+ *  │  Header (1920x130): weekday/date/lunar | clock | wanphra         │
+ *  ├──────────────────────────────────────────┬───────────────────────┤
+ *  │                                          │  Upcoming holidays    │
+ *  │       Mini Calendar 1100x720             │  (540x620)            │
+ *  │       (bumped up from 700x500)           ├───────────────────────┤
+ *  │                                          │  Timer card (540x200) │
+ *  └──────────────────────────────────────────┴───────────────────────┘
  *  Subtitle ("Phase 2.2.x") tucked bottom-left as a faint dev marker.
  */
-#define HDR_H        100
-#define MINI_X       60
-#define MINI_Y       (HDR_H + 16)
-#define UPCOMING_X   880
-#define UPCOMING_Y   (HDR_H + 16)
-#define UPCOMING_W   340
-#define UPCOMING_H   340
-#define TIMER_X      880
-#define TIMER_Y      (UPCOMING_Y + UPCOMING_H + 16)
-#define TIMER_W      340
-#define TIMER_H      140
+#undef HDR_H      /* layout.h had HDR_H=90 for the 800x480 build */
+#define HDR_H            130
+#define COL_GAP          32
+#define EDGE_MARGIN      60   /* cushion against TV overscan */
+
+/* Right column for upcoming + timer cards */
+#define RIGHT_W          540
+#define RIGHT_X          (SCREEN_W - RIGHT_W - EDGE_MARGIN)   /* = 1320 */
+
+#define MINI_X           140    /* centre-ish in left zone (60..1320) */
+#define MINI_Y           (HDR_H + COL_GAP)
+
+#define UPCOMING_X       RIGHT_X
+#define UPCOMING_Y       (HDR_H + COL_GAP)
+#define UPCOMING_W       RIGHT_W
+#define UPCOMING_H       620
+#define TIMER_X          RIGHT_X
+#define TIMER_Y          (UPCOMING_Y + UPCOMING_H + COL_GAP)
+#define TIMER_W          RIGHT_W
+#define TIMER_H          200
 
 extern "C" void build_foundation_ui(void)
 {
     lv_obj_t *scr = lv_screen_active();
 
-    /* ── Tulip background (z-index 0) ──
-     * Stretched to full screen via STRETCH inner-align — LVGL 9 idiom.
-     * (Earlier scale_x/scale_y attempt rendered with the right pixel size
-     * but kept the widget bbox at 800x480, so the stretched pixels were
-     * clipped to the original area. STRETCH grows the bbox AND interp.) */
+    /* ── Calendar background (z-index 0) ──
+     * bg_calendar is now 1920x1080 RGB565 (native HDMI res), so STRETCH
+     * is effectively 1:1 — no upscale blur like the earlier 800x480
+     * bg_tulip suffered from. */
     lv_obj_t *bg = lv_image_create(scr);
-    lv_image_set_src(bg, &bg_tulip);
+    lv_image_set_src(bg, &bg_calendar);
     lv_obj_set_pos(bg, 0, 0);
     lv_obj_set_size(bg, SCREEN_W, SCREEN_H);
     lv_image_set_inner_align(bg, LV_IMAGE_ALIGN_STRETCH);
@@ -127,8 +140,8 @@ extern "C" void build_foundation_ui(void)
 
     /* ── Phase marker (bottom-left, faint) ── */
     lv_obj_t *subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle, "Phase 2.2.9 - Header / Upcoming / Timer");
+    lv_label_set_text(subtitle, "Phase 2.2.5b - 1920x1080 layout");
     lv_obj_set_style_text_color(subtitle, C_TEXT_HINT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, LV_PART_MAIN);
-    lv_obj_align(subtitle, LV_ALIGN_BOTTOM_LEFT, 12, -8);
+    lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_align(subtitle, LV_ALIGN_BOTTOM_LEFT, EDGE_MARGIN, -16);
 }

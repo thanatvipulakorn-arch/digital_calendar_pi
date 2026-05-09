@@ -92,9 +92,10 @@ static void configure_simulator(int argc, char ** argv)
 
     const char * env_w = getenv("LV_SIM_WINDOW_WIDTH");
     const char * env_h = getenv("LV_SIM_WINDOW_HEIGHT");
-    /* Default values */
-    settings.window_width = atoi(env_w ? env_w : "800");
-    settings.window_height = atoi(env_h ? env_h : "480");
+    /* Default values — 1920x1080 to match the Samsung HDMI native fb size.
+     * Override via env LV_SIM_WINDOW_WIDTH / LV_SIM_WINDOW_HEIGHT or -W/-H. */
+    settings.window_width = atoi(env_w ? env_w : "1920");
+    settings.window_height = atoi(env_h ? env_h : "1080");
 
     /* Parse the command-line options. */
     while((opt = getopt(argc, argv, "b:fmW:H:R:BVh")) != -1) {

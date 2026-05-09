@@ -73,15 +73,18 @@ static cal_today_t cal_today_snapshot(void)
 }
 
 /* ──────────── Layout tokens ──────────── */
-#define MINI_CARD_W          700
-#define MINI_CARD_H          500
+/* Phase 2.2.5b — bumped from 700x500 to 1100x720 to fill the 1920x1080
+ * Samsung 27" panel proportionally. Cell size scales automatically from
+ * the card dimensions. */
+#define MINI_CARD_W          1100
+#define MINI_CARD_H          720
 
-#define MINI_TITLE_H         50
-#define MINI_DOW_H           42
-#define MINI_LEGEND_H        30
+#define MINI_TITLE_H         60
+#define MINI_DOW_H           50
+#define MINI_LEGEND_H        36
 #define MINI_GRID_ROWS       6
 
-#define MINI_INNER_PAD       16
+#define MINI_INNER_PAD       20
 #define MINI_INNER_W         (MINI_CARD_W - 2 * MINI_INNER_PAD)
 #define MINI_CELL_W          (MINI_INNER_W / 7)
 #define MINI_GRID_AVAIL      (MINI_CARD_H - 2 * MINI_INNER_PAD - MINI_TITLE_H - MINI_DOW_H - MINI_LEGEND_H)
@@ -131,13 +134,14 @@ static void build_day_cell(lv_obj_t *parent, int day, int row, int col, bool is_
         color = C_TEXT_PRIMARY;
     }
     lv_obj_set_style_text_color(lbl, color, LV_PART_MAIN);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_24, LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_36, LV_PART_MAIN);
 
-    /* Center the number in the cell */
+    /* Center the number in the cell — pad_top half the cell height minus
+     * half the font height (montserrat_36 ≈ 36 px tall). */
     lv_obj_set_size(lbl, MINI_CELL_W, MINI_CELL_H);
     lv_obj_set_pos(lbl, x, y);
     lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_pad_top(lbl, MINI_CELL_H / 2 - 14, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(lbl, MINI_CELL_H / 2 - 22, LV_PART_MAIN);
 }
 
 /* ──────────── Public API ──────────── */
@@ -178,19 +182,19 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
     lv_obj_t *nav_prev = lv_label_create(card);
     lv_label_set_text(nav_prev, "<");
     lv_obj_set_style_text_color(nav_prev, C_ACCENT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(nav_prev, &lv_font_montserrat_32, LV_PART_MAIN);
-    lv_obj_align(nav_prev, LV_ALIGN_TOP_RIGHT, -110, 0);
+    lv_obj_set_style_text_font(nav_prev, &lv_font_montserrat_40, LV_PART_MAIN);
+    lv_obj_align(nav_prev, LV_ALIGN_TOP_RIGHT, -130, 0);
 
     lv_obj_t *nav_home = lv_label_create(card);
     lv_label_set_text(nav_home, LV_SYMBOL_HOME);
     lv_obj_set_style_text_color(nav_home, C_ACCENT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(nav_home, &lv_font_montserrat_32, LV_PART_MAIN);
-    lv_obj_align(nav_home, LV_ALIGN_TOP_RIGHT, -55, 0);
+    lv_obj_set_style_text_font(nav_home, &lv_font_montserrat_40, LV_PART_MAIN);
+    lv_obj_align(nav_home, LV_ALIGN_TOP_RIGHT, -65, 0);
 
     lv_obj_t *nav_next = lv_label_create(card);
     lv_label_set_text(nav_next, ">");
     lv_obj_set_style_text_color(nav_next, C_ACCENT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(nav_next, &lv_font_montserrat_32, LV_PART_MAIN);
+    lv_obj_set_style_text_font(nav_next, &lv_font_montserrat_40, LV_PART_MAIN);
     lv_obj_align(nav_next, LV_ALIGN_TOP_RIGHT, 0, 0);
 
     /* ── DOW headers (Thai) ── */
@@ -227,6 +231,6 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
     lv_obj_t *legend = lv_label_create(card);
     lv_label_set_text(legend, "[*] today    [.] event    [.] holiday");
     lv_obj_set_style_text_color(legend, C_TEXT_HINT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(legend, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_set_style_text_font(legend, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_align(legend, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 }

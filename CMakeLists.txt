@@ -415,7 +415,9 @@ add_executable(lvglsim
     src/ui/timer_card.cpp
     src/calendar/thai_calendar.cpp
     src/assets/thai_sarabun_24.c
-    src/assets/bg_tulip.c)
+    src/assets/bg_calendar.c)
+# bg_tulip.c kept on disk for git history but no longer compiled
+# (replaced by bg_calendar at native 1920x1080 — Phase 2.2.5b)
 
 # Repeat lvgl_linux to resolve circular dependency with lvgl
 target_link_libraries(lvglsim lvgl_linux lvgl lvgl_linux)
