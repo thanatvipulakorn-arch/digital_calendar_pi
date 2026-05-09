@@ -410,8 +410,12 @@ add_executable(lvglsim
     src/main.c
     src/ui/theme.cpp
     src/ui/mini_calendar.cpp
+    src/ui/header.cpp
+    src/ui/upcoming.cpp
+    src/ui/timer_card.cpp
     src/calendar/thai_calendar.cpp
-    src/assets/thai_sarabun_24.c)
+    src/assets/thai_sarabun_24.c
+    src/assets/bg_tulip.c)
 
 # Repeat lvgl_linux to resolve circular dependency with lvgl
 target_link_libraries(lvglsim lvgl_linux lvgl lvgl_linux)

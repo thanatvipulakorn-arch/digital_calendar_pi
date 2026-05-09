@@ -1,7 +1,7 @@
 ﻿# Digital Calendar Pi — Project Context
 
 > **Single source of truth** for the Pi Zero W Digital Calendar project.
-> Last updated: **May 9, 2026** (Phase 2.2.3 complete)
+> Last updated: **May 9, 2026** (Phase 2.2.5 / 2.2.6 / 2.2.8 / 2.2.9 batch — pending verify)
 
 ---
 
@@ -73,7 +73,10 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 │   │   ├── theme.cpp                    (DARK + LIGHT palettes, build_foundation_ui)
 │   │   ├── layout.h                     (1280x720 native tokens, scaled 1.5x from ESP32)
 │   │   ├── mini_calendar.h              (API: mini_calendar_build)
-│   │   └── mini_calendar.cpp            (7x6 grid, today highlight, Thai labels)
+│   │   ├── mini_calendar.cpp            (7x6 grid, today highlight, Thai labels)
+│   │   ├── header.h / header.cpp        (Phase 2.2.6 — top bar: weekday/date/lunar/clock/wanphra)
+│   │   ├── upcoming.h / upcoming.cpp    (Phase 2.2.8 — next holidays card)
+│   │   └── timer_card.h / timer_card.cpp (Phase 2.2.9 — visual placeholder)
 │   │
 │   ├── calendar/                        (Phase 2.2.3 — Thai lunar math)
 │   │   ├── thai_calendar.h              (5.3 KB — public API, lunar/zodiac types)
@@ -82,7 +85,9 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 │   ├── assets/                          (Phase 2.2.2)
 │   │   ├── thai_sarabun_24.c            (124 KB, 3123 lines — LVGL font, supports v9)
 │   │   ├── thai_fonts.h                 (LV_FONT_DECLARE wrapper)
-│   │   └── thai_strings.h               (Thai weekday/month/zodiac/holiday strings)
+│   │   ├── thai_strings.h               (Thai weekday/month/zodiac/holiday strings)
+│   │   ├── bg_tulip.c                   (Phase 2.2.5 — 4.49 MB, 800x480 RGB565 tulip image)
+│   │   └── bg_tulip.h                   (LV_IMAGE_DECLARE for bg_tulip)
 │   │
 │   └── lib/                             (lv_port_linux template helpers)
 │       ├── driver_backends.c/h
@@ -111,7 +116,12 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 | 2.2.2-OPT Strip lv_conf | REVERTED | May 8 | Black screen — see Section 9 |
 | **2.2.3** Thai calendar logic | DONE | May 9 | Ported `thai_calendar.{h,cpp}` verbatim from ESP32. Self-test on Pi verified all 6 reference dates match myhora.com (lunar/zodiac/leap year). Git initialised. |
 | **2.2.4** Real time | DONE | May 9 | `mini_calendar.cpp` now reads `time(NULL)` + `localtime_r()` for today/DOW/days/title. Subtitle in `theme.cpp` updated to "Phase 2.2.4 - Real Time". Visual diff verified on HDMI (today highlight moved from hardcoded 8 → 9). Midnight auto-refresh deferred. |
-| 2.2.5 Tulip background | IN PROGRESS | May 9 | bg_tulip.c image, translucent cards |
+| 2.2.5 Tulip background | BATCH-A pending verify | May 9 | bg_tulip.c image (4.49 MB, 800x480 RGB565 ported from ESP32), full-screen via `LV_IMAGE_ALIGN_STRETCH`. mini_calendar/upcoming/timer cards translucent (opa 220). |
+| 2.2.6 Header | BATCH-A pending verify | May 9 | `header.{h,cpp}` — weekday/date/lunar/clock/wanphra. 1 Hz lv_timer in main.c → `header_tick()` updates clock per-second, others on day_changed. |
+| 2.2.7 Weather card | PENDING (Batch B) | — | OpenWeather API, libcurl |
+| 2.2.8 Upcoming holidays | BATCH-A pending verify | May 9 | `upcoming.{h,cpp}` — scans 90 days via `thai_calendar_*`, sorts ascending, shows up to 5 with offset chip. Snapshot at build (no midnight refresh yet). |
+| 2.2.9 Timer | BATCH-A pending verify | May 9 | `timer_card.{h,cpp}` — visual placeholder (bell + "Tap to set"). State machine + popup + buzzer deferred (need GPIO/audio HAT). |
+| 2.2.10 Sidebar tabs | PENDING (Batch C) | — | Home / Month / Settings — port `ui_charts.cpp` + `ui_settings.cpp` |
 | 2.2.5 Tulip background | PENDING | — | bg_tulip.c image, translucent cards |
 | 2.2.6 Header | PENDING | — | Weekday + date + clock + wanphra |
 | 2.2.7 Weather card | PENDING | — | OpenWeather API, libcurl |
@@ -339,3 +349,6 @@ When resuming work:
 - **2026-05-09** — Phase 2.2.3 ported `thai_calendar.{h,cpp}` verbatim (math-only, no Arduino deps). Self-test on Pi matched myhora.com for 6 reference dates → math correct.
 - **2026-05-09** — Home builds use Pi Ethernet via USB-OTG adapter. Home Wi-Fi has wireless-layer block that's not worth fighting; office (LEnet) WiFi is fine.
 - **2026-05-09** — `sync_to_pi.ps1` and `build_pi.ps1` now read `$env:PI_HOST` (override) → fall back to `digitalcal-pi.local` (mDNS).
+- **2026-05-09** — Phase 2.2.5 background uses `LV_IMAGE_ALIGN_STRETCH` (LVGL 9 idiom) — earlier `lv_image_set_scale_x/y` left widget bbox at 800x480 and the stretched pixels were clipped.
+- **2026-05-09** — Switched build process to **batch by phase**: realistic full-rebuild on Pi Zero W is ~1 hour (not 5-10 min as initially estimated). Plan future work as Batch A (UI: 2.2.5/6/8/9), Batch B (network: 2.2.7), Batch C (refactor: 2.2.10) so each only triggers one full rebuild instead of one per sub-phase.
+- **2026-05-09** — Phase 2.2.9 timer card: visual placeholder only (bell + "Tap to set"). State machine + popup + buzzer deferred — needs explicit GPIO/audio HAT decision.

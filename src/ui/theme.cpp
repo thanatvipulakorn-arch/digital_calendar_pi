@@ -59,42 +59,76 @@ extern "C" void theme_init(theme_mode_t mode)
     }
 }
 
-/* ──────────── Foundation UI (Phase 2.2.1) ──────────── */
+/* ──────────── Foundation UI (Phase 2.2.1, expanded through 2.2.9) ──────────── */
 #include "layout.h"
 #include "mini_calendar.h"
+#include "header.h"
+#include "upcoming.h"
+#include "timer_card.h"
+#include "../assets/bg_tulip.h"
+
+/* Native screen size — must match boards/<board>.cmake / window settings. */
+#define SCREEN_W   1280
+#define SCREEN_H   720
+
+/* Layout — 1280x720 with bg_tulip behind everything.
+ *
+ *  ┌──────────────────────────────────────────────────────────┐
+ *  │  Header (1280x100): weekday/date/lunar | clock | wanphra │
+ *  ├───────────────────────────────────┬──────────────────────┤
+ *  │                                   │  Upcoming holidays   │
+ *  │  Mini Calendar 700x500            │  (380x340)           │
+ *  │  centred under header             ├──────────────────────┤
+ *  │                                   │  Timer card          │
+ *  │                                   │  (380x140)           │
+ *  └───────────────────────────────────┴──────────────────────┘
+ *  Subtitle ("Phase 2.2.x") tucked bottom-left as a faint dev marker.
+ */
+#define HDR_H        100
+#define MINI_X       60
+#define MINI_Y       (HDR_H + 16)
+#define UPCOMING_X   880
+#define UPCOMING_Y   (HDR_H + 16)
+#define UPCOMING_W   340
+#define UPCOMING_H   340
+#define TIMER_X      880
+#define TIMER_Y      (UPCOMING_Y + UPCOMING_H + 16)
+#define TIMER_W      340
+#define TIMER_H      140
 
 extern "C" void build_foundation_ui(void)
 {
     lv_obj_t *scr = lv_screen_active();
 
-    /* Apply theme background */
-    lv_obj_set_style_bg_color(scr, C_BG_PRIMARY, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
+    /* ── Tulip background (z-index 0) ──
+     * Stretched to full screen via STRETCH inner-align — LVGL 9 idiom.
+     * (Earlier scale_x/scale_y attempt rendered with the right pixel size
+     * but kept the widget bbox at 800x480, so the stretched pixels were
+     * clipped to the original area. STRETCH grows the bbox AND interp.) */
+    lv_obj_t *bg = lv_image_create(scr);
+    lv_image_set_src(bg, &bg_tulip);
+    lv_obj_set_pos(bg, 0, 0);
+    lv_obj_set_size(bg, SCREEN_W, SCREEN_H);
+    lv_image_set_inner_align(bg, LV_IMAGE_ALIGN_STRETCH);
+    lv_obj_clear_flag(bg, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Title (top center) */
-    lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "Digital Calendar - Pi");
-    lv_obj_set_style_text_color(title, C_TEXT_PRIMARY, LV_PART_MAIN);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_36, LV_PART_MAIN);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 16);
+    /* ── Header bar (top) ── */
+    header_build(scr, 0, 0, SCREEN_W, HDR_H);
 
-    /* Subtitle — TODO: move to a central app_version.h in 2.5.x housekeeping */
+    /* ── Mini calendar — left of column 3 ── */
+    mini_calendar_build(scr, MINI_X, MINI_Y);
+
+    /* ── Upcoming holidays card (right column, top) ── */
+    upcoming_build(scr, UPCOMING_X, UPCOMING_Y, UPCOMING_W, UPCOMING_H);
+
+    /* ── Timer card (right column, bottom) ── */
+    timer_card_build(scr, TIMER_X, TIMER_Y, TIMER_W, TIMER_H);
+
+    /* ── Phase marker (bottom-left, faint) ── */
     lv_obj_t *subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle, "Phase 2.2.4 - Real Time");
-    lv_obj_set_style_text_color(subtitle, C_ACCENT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_18, LV_PART_MAIN);
-    lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 60);
-
-    /* Mini Calendar (centered horizontally, below title) */
-    /* Card is 700x500, screen is 1280x720
-     * X offset: (1280 - 700) / 2 = 290
-     * Y offset: ~110 (below title+subtitle) */
-    mini_calendar_build(scr, 290, 110);
-
-    /* Footer hint (bottom) */
-    lv_obj_t *footer = lv_label_create(scr);
-    lv_label_set_text(footer, "Press Ctrl+C to exit");
-    lv_obj_set_style_text_color(footer, C_TEXT_MUTED, LV_PART_MAIN);
-    lv_obj_set_style_text_font(footer, &lv_font_montserrat_14, LV_PART_MAIN);
-    lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -16);
+    lv_label_set_text(subtitle, "Phase 2.2.9 - Header / Upcoming / Timer");
+    lv_obj_set_style_text_color(subtitle, C_TEXT_HINT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_align(subtitle, LV_ALIGN_BOTTOM_LEFT, 12, -8);
 }

@@ -147,12 +147,15 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
      * Phase 2.2.4-MIDNIGHT will rebuild via lv_timer when the day rolls. */
     const cal_today_t td = cal_today_snapshot();
 
-    /* ── Card ── */
+    /* ── Card ──
+     * Phase 2.2.5: card is now translucent so the tulip background shows
+     * through. 220/255 ≈ 86% opacity — readable text, hint of pink/green
+     * underneath. Tweak between 200..240 if too see-through or too solid. */
     lv_obj_t *card = lv_obj_create(parent);
     lv_obj_set_size(card, MINI_CARD_W, MINI_CARD_H);
     lv_obj_set_pos(card, x, y);
     lv_obj_set_style_bg_color(card, C_BG_SECONDARY, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(card, 220, LV_PART_MAIN);
     lv_obj_set_style_border_color(card, C_BORDER, LV_PART_MAIN);
     lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(card, 16, LV_PART_MAIN);

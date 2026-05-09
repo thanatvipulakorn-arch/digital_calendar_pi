@@ -32,6 +32,7 @@
 /* Digital Calendar Pi - foundation UI */
 #include "ui/theme.h"
 #include "ui/layout.h"
+#include "ui/header.h"
 
 /* Phase 2.2.3 - Thai lunar calendar logic (port from ESP32) */
 #include "calendar/thai_calendar.h"
@@ -40,6 +41,7 @@
 static void configure_simulator(int argc, char ** argv);
 static void print_lvgl_version(void);
 static void print_usage(void);
+void header_tick_trampoline(lv_timer_t *t);   /* Phase 2.2.6 — see bottom of file */
 
 /* contains the name of the selected backend if user
  * has specified one on the command line */
@@ -233,8 +235,20 @@ int main(int argc, char ** argv)
     theme_init(THEME_MODE_DARK);
     build_foundation_ui();
 
+    /* Phase 2.2.6: 1 Hz tick refreshes the header (clock per-second,
+     * date/lunar/wanphra on midnight rollover — see header_tick()).
+     * Cheap: header_tick early-returns when nothing changed. */
+    lv_timer_create(header_tick_trampoline, 1000, NULL);
+
     /* Enter the run loop of the selected backend */
     driver_backends_run_loop();
 
     return 0;
+}
+
+/* Trampoline so the lv_timer_cb_t signature matches header_tick(void) */
+void header_tick_trampoline(lv_timer_t *t)
+{
+    (void)t;
+    header_tick();
 }
