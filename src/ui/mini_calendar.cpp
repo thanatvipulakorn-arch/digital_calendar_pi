@@ -21,6 +21,7 @@
 #include "theme.h"
 #include "../assets/thai_fonts.h"
 #include "../assets/thai_strings.h"
+#include "../calendar/thai_calendar.h"
 #include <cstdio>
 #include <cstdbool>
 #include <ctime>
@@ -108,32 +109,78 @@ static cal_today_t cal_today_snapshot(void)
 /* Phase 2.2.2: ใช้ Thai จาก thai_strings.h */
 /* "พฤษภาคม 2569" — May 2026 = พ.ศ. 2569 */
 
+/* ──────────── Helpers: explicit grid lines ────────────
+ * Phase 2.2.5i — per-cell right+bottom borders looked patchy (the
+ * border_side cast + LVGL's content-area math left visible gaps where
+ * the line should have continued across DOW↔day and column boundaries).
+ * Replacing with first-class horizontal/vertical line objects guarantees
+ * pixel-perfect continuous lines. Each "line" is a 1-px lv_obj with
+ * bg_color set — no border, no padding, no scrollbar. */
+static lv_obj_t *add_vline(lv_obj_t *parent, int x, int y, int h)
+{
+    lv_obj_t *line = lv_obj_create(parent);
+    lv_obj_remove_style_all(line);
+    lv_obj_set_pos(line, x, y);
+    lv_obj_set_size(line, 1, h);
+    lv_obj_set_style_bg_color(line, MINI_GRID_COLOR, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(line, MINI_GRID_OPA, LV_PART_MAIN);
+    lv_obj_clear_flag(line, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(line, LV_OBJ_FLAG_CLICKABLE);
+    return line;
+}
+
+static lv_obj_t *add_hline(lv_obj_t *parent, int x, int y, int w)
+{
+    lv_obj_t *line = lv_obj_create(parent);
+    lv_obj_remove_style_all(line);
+    lv_obj_set_pos(line, x, y);
+    lv_obj_set_size(line, w, 1);
+    lv_obj_set_style_bg_color(line, MINI_GRID_COLOR, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(line, MINI_GRID_OPA, LV_PART_MAIN);
+    lv_obj_clear_flag(line, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(line, LV_OBJ_FLAG_CLICKABLE);
+    return line;
+}
+
 /* ──────────── Build a single day cell ──────────── */
-/* Phase 2.2.5d: each cell is now its own bordered container so the grid
- * lines come for free — adjacent cells share their right/bottom borders.
- * Day number is montserrat_48 (the largest builtin), centred in the cell. */
-static void build_day_cell(lv_obj_t *parent, int day, int row, int col, bool is_today)
+/* Phase 2.2.5j marker rules per Lek:
+ *   วันพระ (regular Buddhist holy day, not also a national holiday)
+ *     → number text is yellow + a yellow circle dot below the number
+ *   National / major-Buddhist holiday (Songkran, Visakha Puja, etc.)
+ *     → cell gets an amber background tint + the Thai holiday name
+ *       printed below the number
+ *   Today still wins the cell visually (cyan box + navy text).
+ */
+static void build_day_cell(lv_obj_t *parent, int day, int row, int col,
+                           bool is_today, bool is_wanphra, bool is_holiday,
+                           const char *holiday_name_th)
 {
     int x = MINI_INNER_PAD + col * MINI_CELL_W;
     int y = MINI_INNER_PAD + MINI_GRID_Y + row * MINI_CELL_H;
 
-    /* Cell container — provides the table grid border */
+    /* Transparent positioning container */
     lv_obj_t *cell = lv_obj_create(parent);
-    lv_obj_remove_style_all(cell);                  /* wipe theme defaults */
+    lv_obj_remove_style_all(cell);
     lv_obj_set_size(cell, MINI_CELL_W, MINI_CELL_H);
     lv_obj_set_pos(cell, x, y);
-    lv_obj_set_style_border_color(cell, MINI_GRID_COLOR, LV_PART_MAIN);
-    lv_obj_set_style_border_opa(cell, MINI_GRID_OPA, LV_PART_MAIN);
-    lv_obj_set_style_border_width(cell, 1, LV_PART_MAIN);
-    /* Right + bottom only → adjacent cells share lines, no doubled-up
-     * borders. Top/left of the grid are the card's inner padding edge. */
-    lv_obj_set_style_border_side(cell,
-        (lv_border_side_t)(LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM),
-        LV_PART_MAIN);
     lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(cell, LV_OBJ_FLAG_CLICKABLE);
 
-    /* Today: filled cyan rounded box centred inside the cell */
+    /* Holiday tint (z=1, behind everything else). Skipped on today —
+     * the cyan box would cover it anyway. */
+    if (is_holiday && !is_today) {
+        lv_obj_t *tint = lv_obj_create(cell);
+        lv_obj_remove_style_all(tint);
+        lv_obj_set_size(tint, MINI_CELL_W - 4, MINI_CELL_H - 4);
+        lv_obj_center(tint);
+        lv_obj_set_style_bg_color(tint, lv_color_hex(0xFFA726), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(tint, 70, LV_PART_MAIN);
+        lv_obj_set_style_radius(tint, 8, LV_PART_MAIN);
+        lv_obj_clear_flag(tint, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(tint, LV_OBJ_FLAG_CLICKABLE);
+    }
+
+    /* Today highlight (z=2) */
     if (is_today) {
         lv_obj_t *highlight = lv_obj_create(cell);
         lv_obj_remove_style_all(highlight);
@@ -146,19 +193,79 @@ static void build_day_cell(lv_obj_t *parent, int day, int row, int col, bool is_
         lv_obj_clear_flag(highlight, LV_OBJ_FLAG_CLICKABLE);
     }
 
-    /* Day number label — centred, montserrat_48 (max builtin) */
+    /* Day number label — Montserrat 48, color by priority */
     lv_obj_t *lbl = lv_label_create(cell);
     char buf[8];
     snprintf(buf, sizeof(buf), "%d", day);
     lv_label_set_text(lbl, buf);
 
     lv_color_t color;
-    if (is_today)                       color = C_BG_PRIMARY;       /* navy on cyan */
-    else if (col == 0 || col == 6)      color = lv_color_hex(0xFF7A8C); /* weekend pink */
-    else                                color = C_TEXT_PRIMARY;
+    if (is_today)                       color = C_BG_PRIMARY;                /* navy on cyan */
+    else if (is_wanphra && !is_holiday) color = lv_color_hex(0xFFEB3B);      /* bright yellow */
+    else if (is_holiday)                color = lv_color_hex(0xFFA726);      /* amber on tint */
+    else if (col == 0 || col == 6)      color = lv_color_hex(0xFF7A8C);      /* weekend pink */
+    else                                color = C_TEXT_PRIMARY;              /* weekday white */
     lv_obj_set_style_text_color(lbl, color, LV_PART_MAIN);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_48, LV_PART_MAIN);
-    lv_obj_center(lbl);
+    /* Shift number up if there's a marker (circle or holiday name) below */
+    if ((is_wanphra || is_holiday) && !is_today) {
+        lv_obj_align(lbl, LV_ALIGN_CENTER, 0, -10);
+    } else {
+        lv_obj_center(lbl);
+    }
+
+    /* Wanphra circle (yellow dot below the number) — only for regular
+     * วันพระ days that aren't also a national holiday. Today still gets
+     * the dot since the cyan box covers only the number area. */
+    if (is_wanphra && !is_holiday) {
+        lv_obj_t *circle = lv_obj_create(cell);
+        lv_obj_remove_style_all(circle);
+        lv_obj_set_size(circle, 12, 12);
+        lv_obj_set_style_bg_color(circle, lv_color_hex(0xFFEB3B), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(circle, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_radius(circle, 6, LV_PART_MAIN);
+        lv_obj_clear_flag(circle, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(circle, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_align(circle, LV_ALIGN_BOTTOM_MID, 0, -8);
+    }
+
+    /* Holiday name label below the number — Thai text scaled small.
+     * thai_sarabun_stacked_24 at 0.55x → effective ~13 px, fits the
+     * ~26 px space below a 48 px digit centred at y_offset -10. */
+    if (is_holiday && holiday_name_th) {
+        lv_obj_t *hlbl = lv_label_create(cell);
+        lv_label_set_text(hlbl, holiday_name_th);
+        lv_obj_set_style_text_color(hlbl, color, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hlbl, &thai_sarabun_stacked_24, LV_PART_MAIN);
+        lv_obj_set_style_transform_scale_x(hlbl, 140, LV_PART_MAIN);  /* 0.55x */
+        lv_obj_set_style_transform_scale_y(hlbl, 140, LV_PART_MAIN);
+        lv_obj_set_width(hlbl, MINI_CELL_W);
+        lv_obj_set_style_text_align(hlbl, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        lv_obj_align(hlbl, LV_ALIGN_BOTTOM_MID, 0, -2);
+    }
+}
+
+/* Returns the Thai holiday name (lookup'd from English) if (year, month,
+ * day) is a Thai national holiday, otherwise NULL. Caller's pointer is
+ * valid for the program lifetime (THAI_HOLIDAY_MAP is static const). */
+static const char *day_holiday_name_th(int year_ce, int month, int day)
+{
+    const char *name_en = thai_calendar_fixed_holiday_en(month, day);
+    if (!name_en) {
+        thai_lunar_t lu = thai_calendar_from_date(year_ce, month, day);
+        if (lu.valid) name_en = thai_calendar_holiday_en(&lu);
+    }
+    if (!name_en) return NULL;
+    const char *th = thai_holiday_lookup(name_en);
+    return th ? th : name_en;   /* fall back to English if no Thai mapping */
+}
+
+/* Returns true if (year, month, day) is a regular Buddhist holy day
+ * (วันพระ): waxing 8/15, waning 8, waning 14/15. */
+static bool day_is_wanphra(int year_ce, int month, int day)
+{
+    thai_lunar_t lu = thai_calendar_from_date(year_ce, month, day);
+    return lu.valid && thai_calendar_is_buddhist_day(&lu);
 }
 
 /* ──────────── Public API ──────────── */
@@ -235,17 +342,11 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
         int x = MINI_INNER_PAD + i * MINI_CELL_W;
         int y = MINI_INNER_PAD + MINI_DOW_Y;
 
-        /* DOW cell container — bordered like day cells */
+        /* Transparent DOW positioning container (grid drawn separately) */
         lv_obj_t *dow_cell = lv_obj_create(card);
         lv_obj_remove_style_all(dow_cell);
         lv_obj_set_size(dow_cell, MINI_CELL_W, MINI_DOW_H);
         lv_obj_set_pos(dow_cell, x, y);
-        lv_obj_set_style_border_color(dow_cell, MINI_GRID_COLOR, LV_PART_MAIN);
-        lv_obj_set_style_border_opa(dow_cell, MINI_GRID_OPA, LV_PART_MAIN);
-        lv_obj_set_style_border_width(dow_cell, 1, LV_PART_MAIN);
-        lv_obj_set_style_border_side(dow_cell,
-            (lv_border_side_t)(LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM),
-            LV_PART_MAIN);
         lv_obj_clear_flag(dow_cell, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_clear_flag(dow_cell, LV_OBJ_FLAG_CLICKABLE);
 
@@ -253,28 +354,52 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
         lv_label_set_text(dow, THAI_WEEKDAY_SHORT[i]);
         lv_obj_set_style_text_color(dow, lv_color_hex(DOW_COLORS[i]), LV_PART_MAIN);
         lv_obj_set_style_text_font(dow, &thai_sarabun_stacked_24, LV_PART_MAIN);
-        /* Phase 2.2.5f — bigger (2.8x → effective 67 px > day 48 px) and
-         * pinned near the top of the cell so the labels don't float in
-         * the middle. transform_scale rendering extends ~16 px above and
-         * below the bbox centre, so an offset of 18 from top puts the
-         * scaled glyph just inside the cell's top border. */
+        /* Phase 2.2.5j — geometric centre with a -10 px y-offset so the
+         * Thai labels look centred (tone marks pull the perceived centre
+         * lower than the bbox centre when transform_scale is applied). */
         lv_obj_set_style_transform_scale_x(dow, 717, LV_PART_MAIN);  /* 2.8x */
         lv_obj_set_style_transform_scale_y(dow, 717, LV_PART_MAIN);
-        lv_obj_align(dow, LV_ALIGN_TOP_MID, 0, 18);
+        lv_obj_align(dow, LV_ALIGN_CENTER, 0, -10);
     }
 
     /* ── Day cells ── */
     int row = 0;
     int col = td.dow_first;
     for (int day = 1; day <= td.days_in_month; day++) {
-        bool is_today = (day == td.today);
-        build_day_cell(card, day, row, col, is_today);
+        bool is_today    = (day == td.today);
+        bool is_wanphra  = day_is_wanphra(td.year_ce, td.month, day);
+        const char *hol  = day_holiday_name_th(td.year_ce, td.month, day);
+        bool is_holiday  = (hol != NULL);
+        build_day_cell(card, day, row, col, is_today, is_wanphra, is_holiday, hol);
 
         col++;
         if (col >= 7) {
             col = 0;
             row++;
         }
+    }
+
+    /* ── Grid lines (Phase 2.2.5j) ──
+     * Phase 2.2.5j adds the missing left + right edges and the top edge
+     * (DOW row top), so the grid is now a closed table on all four sides. */
+    const int grid_top    = MINI_INNER_PAD + MINI_DOW_Y;            /* top of DOW row */
+    const int grid_bot    = MINI_INNER_PAD + MINI_GRID_Y +
+                            MINI_GRID_ROWS * MINI_CELL_H;           /* bottom of last day row */
+    const int grid_left   = MINI_INNER_PAD;
+    const int grid_right  = MINI_INNER_PAD + 7 * MINI_CELL_W;
+    const int grid_height = grid_bot - grid_top;
+    const int grid_width  = grid_right - grid_left;
+
+    /* 8 vertical lines: left edge (c=0), 6 inner, right edge (c=7) */
+    for (int c = 0; c <= 7; c++) {
+        add_vline(card, MINI_INNER_PAD + c * MINI_CELL_W, grid_top, grid_height);
+    }
+    /* 8 horizontal lines: top edge of DOW + DOW divider + 5 day row
+     * dividers + bottom edge */
+    add_hline(card, grid_left, grid_top, grid_width);          /* top edge */
+    for (int r = 0; r <= MINI_GRID_ROWS; r++) {
+        int y = MINI_INNER_PAD + MINI_GRID_Y + r * MINI_CELL_H;
+        add_hline(card, grid_left, y, grid_width);
     }
 
     /* ── Legend (bottom) ── */
