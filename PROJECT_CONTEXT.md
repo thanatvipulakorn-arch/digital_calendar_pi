@@ -1,7 +1,7 @@
 ﻿# Digital Calendar Pi — Project Context
 
 > **Single source of truth** for the Pi Zero W Digital Calendar project.
-> Last updated: **May 9, 2026 (end of session)** — Phase 2.2.5h committed, visual verification of 2.2.5h pending in next session.
+> Last updated: **May 9, 2026** — Phase 2.2.5x complete, project shipped (v1.0.0).
 
 ---
 
@@ -130,7 +130,16 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 | **2.2.5e** Degree-symbol tofu + headline | DONE | May 9 | Weather "°C" was rendering as ☐ — Thai font's range is 32-127 + 3584-3711, no Latin-1. Split the temp unit and feels-like meta into Thai-font + Montserrat-font label pairs. Upcoming title bumped to C_ACCENT (cyan) + 1.4x scale. |
 | **2.2.5f** DOW colours, size, alignment | DONE | May 9 | Per-day Thai colour palette: อา/ส = red (0xFF7A8C, kept); จ = yellow; อ = pink; พ = green; พฤ = orange; ศ = blue. DOW scale 2.2x → 2.8x; cell height 80 → 100; aligned TOP_MID (offset 18) instead of centre. |
 | **2.2.5g** Upcoming row spacing | DONE | May 9 | row_h 38 → 56, row_y0 44 → 80 (clearance for scaled headline + breathing room). |
-| **2.2.5h** Card translucency + grid line visibility | DONE (visual verify pending) | May 9 | All cards bg_opa 220 → 170 (~67%); header bar 200 → 160. Grid lines 0x506070/LV_OPA_50 → 0xE0EFFF/200 (light blue-white at 78%). Lek hadn't confirmed the visual on HDMI before the session ended — first thing to check on resume. |
+| **2.2.5h** Card translucency + grid line visibility | DONE | May 9 | All cards bg_opa 220 → 170 (~67%); header bar 200 → 160. Grid lines 0x506070/LV_OPA_50 → 0xE0EFFF/200 (light blue-white at 78%). |
+| **2.2.5i** Explicit grid lines | DONE | May 9 | Per-cell right+bottom borders had visible gaps; replaced with first-class lv_obj 1-px hline/vline objects for pixel-perfect continuity. |
+| **2.2.5j** Closed grid + DOW lift + holiday markers | DONE | May 9 | Added left/right/top edge lines to close the table border. DOW lifted toward visual centre with `LV_ALIGN_CENTER, 0, -25` (still wrong — see 2.2.5n). Holiday/wanphra markers introduced: amber tint + Thai name for national holidays, yellow text + circle for regular วันพระ. |
+| **2.2.5k** Holiday colour swap | DONE | May 9 | Holiday tint amber → purple (`#BA68C8`) so it doesn't look like wanphra yellow. Number text on tinted cells → light lilac (`#E1BEE7`) for contrast. Royal-Thai colour vibe. |
+| **2.2.5l** Stub label cleanup + Visakha wanphra | DONE | May 9 | Removed `(stub - Phase 2.2.7-NET)` from weather card; relaxed `is_wanphra && !is_holiday` to `is_wanphra && !is_today` so May 31 (Visakha = wanphra + holiday) also gets the yellow circle (positioned above the holiday name label). |
+| **2.2.5n** DOW transform_pivot fix | DONE | May 9 | Lek's diagnosis: day numbers (no transform) centred fine with lv_obj_center; DOW (transform_scale 2.8x) drifted because LVGL's default pivot is top-left. Pinned `transform_pivot_x/y = lv_pct(50)` and dropped the y-offset hack — DOW now centres perfectly with the same `lv_obj_center` as the day numbers. **The big take-away of the day:** the y-offset hacks were treating the symptom; the real bug was the default transform pivot. Captured in SKILL.md. |
+| **2.2.5p** Production UI cleanup | DONE | May 9 | Removed bottom-left "Phase 2.2.x" dev marker, mini-cal legend, and weather "(stub)" hint. UI now reads as a finished product. |
+| **2.2.5q** Wanphra circle on today | DONE | May 9 | Today + wanphra (May 9) was missing the yellow circle because of the `!is_today` guard; relaxed to always show the circle on wanphra. Yellow on cyan is fine visually. |
+| **2.2.5r** WiFi label visibility | DONE | May 9 | Slate-grey 14 px was invisible on translucent navy + tulip; bumped to white / 18 px and moved from y=64 to y=90 below the scaled clock visual. |
+| **2.2.5s** WiFi indicator + clock centring | DONE | May 9 | Same `transform_pivot 50/50` fix from 2.2.5n applied to the clock. WiFi indicator now uses `lv_label_set_recolor` with inline `#RRGGBB ...#` so `LV_SYMBOL_WIFI` is green when associated, red when offline. SSID query switched from iwgetid (not on Trixie) to nmcli. |
 | **2.2.6** Header | DONE | May 9 | `header.{h,cpp}` — weekday/date/lunar/clock/wanphra. 1 Hz lv_timer in main.c → `header_tick()` updates clock per-second, others on day_changed. |
 | 2.2.7 Weather card (NET) | PENDING (Batch B) | — | Replace stub with libcurl + cJSON Open-Meteo client + 5-min refresh on lv_timer in worker thread |
 | **2.2.8** Upcoming holidays | DONE | May 9 | `upcoming.{h,cpp}` — scans 90 days via `thai_calendar_*`, sorts ascending, shows up to 5 with offset chip. Snapshot at build (no midnight refresh yet). |
@@ -340,7 +349,24 @@ D:\MY WORK\MY EMBEDED PROJECT\ESP32\digital_calendar\
 
 ---
 
-## 12. Next Session Checklist
+## 12. Project Status — SHIPPED (v1.0.0, 2026-05-09)
+
+The 2.2.5x batch is the production-ready release. The HDMI display
+shows: header (weekday/BE-date/lunar | scaled clock | WiFi+NTP status |
+wanphra indicator), full-screen 1920x1080 wallpaper, mini calendar with
+Thai-tradition DOW colours and per-day holiday/wanphra markers, weather
+stub card, and upcoming holidays list.
+
+What's left (intentionally deferred — not blockers for v1.0):
+
+| Item | Why deferred | Pickup notes |
+|------|--------------|--------------|
+| Phase 2.2.7-NET (live weather) | Stub renders fine; libcurl + cJSON wiring is a clean follow-on | `apt install libcurl4-openssl-dev libcjson-dev` then add to CMakeLists; replace static "32 / 35 / 65%" in weather.cpp with periodic Open-Meteo fetch (5-min lv_timer in a worker pthread; same code shape as `header_tick`). |
+| Phase 2.2.10 (Sidebar tabs) | Single-screen UI is enough for the wall-clock use case | Port `ui_charts.cpp` (~600 lines) and `ui_settings.cpp` (~700 lines) from ESP32 if a multi-screen build becomes useful. |
+| Midnight rollover | Snapshots at startup are correct for first 24 h; restart picks up the new day | Wire a day_changed signal in `header_tick` (already detected) to call `mini_calendar_build` / `upcoming_build` again. Same scheme as ESP32. |
+| WSL2 desktop simulator | ccache + sync v2 made Pi build cycle 22-60 sec — fast enough | Build LVGL on Linux desktop for sub-second iteration if needed. |
+
+## 13. Next Session Checklist
 
 **Resume order, top to bottom:**
 
