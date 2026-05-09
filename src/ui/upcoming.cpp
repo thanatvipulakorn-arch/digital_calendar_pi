@@ -100,7 +100,7 @@ extern "C" void upcoming_build(lv_obj_t *parent, int x, int y, int w, int h)
     lv_obj_t *title = lv_label_create(card);
     lv_label_set_text(title, THAI_UPCOMING_HOL);
     lv_obj_set_style_text_color(title, C_TEXT_PRIMARY, LV_PART_MAIN);
-    lv_obj_set_style_text_font(title, &thai_sarabun_24, LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, &thai_sarabun_stacked_24, LV_PART_MAIN);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
 
     /* Scan */
@@ -112,7 +112,7 @@ extern "C" void upcoming_build(lv_obj_t *parent, int x, int y, int w, int h)
         lv_obj_t *lbl = lv_label_create(card);
         lv_label_set_text(lbl, "ไม่มีวันหยุดใน 90 วันข้างหน้า");
         lv_obj_set_style_text_color(lbl, C_TEXT_MUTED, LV_PART_MAIN);
-        lv_obj_set_style_text_font(lbl, &thai_sarabun_24, LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, &thai_sarabun_stacked_24, LV_PART_MAIN);
         lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 0, 40);
         return;
     }
@@ -137,7 +137,7 @@ extern "C" void upcoming_build(lv_obj_t *parent, int x, int y, int w, int h)
         lv_obj_t *l = lv_label_create(card);
         lv_label_set_text(l, left);
         lv_obj_set_style_text_color(l, C_TEXT_PRIMARY, LV_PART_MAIN);
-        lv_obj_set_style_text_font(l, &thai_sarabun_24, LV_PART_MAIN);
+        lv_obj_set_style_text_font(l, &thai_sarabun_stacked_24, LV_PART_MAIN);
         lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
         lv_obj_set_width(l, w - 90);
         lv_obj_set_pos(l, 0, row_y);
@@ -151,7 +151,7 @@ extern "C" void upcoming_build(lv_obj_t *parent, int x, int y, int w, int h)
         lv_obj_t *r = lv_label_create(card);
         lv_label_set_text(r, chip);
         lv_obj_set_style_text_color(r, C_WARNING, LV_PART_MAIN);
-        lv_obj_set_style_text_font(r, &thai_sarabun_24, LV_PART_MAIN);
+        lv_obj_set_style_text_font(r, &thai_sarabun_stacked_24, LV_PART_MAIN);
         lv_obj_align(r, LV_ALIGN_TOP_RIGHT, 0, row_y);
     }
 }

@@ -56,26 +56,32 @@ extern "C" void header_build(lv_obj_t *parent, int x, int y, int w, int h)
     g_lbl_weekday = lv_label_create(bar);
     lv_label_set_text(g_lbl_weekday, "—");
     lv_obj_set_style_text_color(g_lbl_weekday, C_TEXT_MUTED, LV_PART_MAIN);
-    lv_obj_set_style_text_font(g_lbl_weekday, &thai_sarabun_24, LV_PART_MAIN);
+    lv_obj_set_style_text_font(g_lbl_weekday, &thai_sarabun_stacked_24, LV_PART_MAIN);
     lv_obj_align(g_lbl_weekday, LV_ALIGN_TOP_LEFT, 0, 0);
 
     g_lbl_date = lv_label_create(bar);
     lv_label_set_text(g_lbl_date, "—");
     lv_obj_set_style_text_color(g_lbl_date, C_TEXT_PRIMARY, LV_PART_MAIN);
-    lv_obj_set_style_text_font(g_lbl_date, &thai_sarabun_24, LV_PART_MAIN);
+    lv_obj_set_style_text_font(g_lbl_date, &thai_sarabun_stacked_24, LV_PART_MAIN);
     lv_obj_align(g_lbl_date, LV_ALIGN_TOP_LEFT, 0, 26);
 
     g_lbl_lunar = lv_label_create(bar);
     lv_label_set_text(g_lbl_lunar, "—");
     lv_obj_set_style_text_color(g_lbl_lunar, C_TEXT_MUTED, LV_PART_MAIN);
-    lv_obj_set_style_text_font(g_lbl_lunar, &thai_sarabun_24, LV_PART_MAIN);
+    lv_obj_set_style_text_font(g_lbl_lunar, &thai_sarabun_stacked_24, LV_PART_MAIN);
     lv_obj_align(g_lbl_lunar, LV_ALIGN_TOP_LEFT, 0, 54);
 
-    /* ── Centre column: clock + sync status ── */
+    /* ── Centre column: clock + sync status ──
+     * Phase 2.2.5c: clock blown up via transform_scale because LVGL's
+     * builtin Montserrat tops out at 48 px. Asymmetric scale (wider than
+     * tall) per Lek's spec — there's more horizontal room than vertical
+     * inside the 130 px header. 256 = 1.0x. */
     g_lbl_clock = lv_label_create(bar);
     lv_label_set_text(g_lbl_clock, "00:00:00");
     lv_obj_set_style_text_color(g_lbl_clock, C_TEXT_PRIMARY, LV_PART_MAIN);
     lv_obj_set_style_text_font(g_lbl_clock, &lv_font_montserrat_48, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_x(g_lbl_clock, 460, LV_PART_MAIN);  /* 1.8x */
+    lv_obj_set_style_transform_scale_y(g_lbl_clock, 384, LV_PART_MAIN);  /* 1.5x */
     lv_obj_align(g_lbl_clock, LV_ALIGN_TOP_MID, 0, 8);
 
     g_lbl_sync = lv_label_create(bar);
@@ -88,7 +94,7 @@ extern "C" void header_build(lv_obj_t *parent, int x, int y, int w, int h)
     g_lbl_wanphra = lv_label_create(bar);
     lv_label_set_text(g_lbl_wanphra, "");
     lv_obj_set_style_text_color(g_lbl_wanphra, C_TEXT_PRIMARY, LV_PART_MAIN);
-    lv_obj_set_style_text_font(g_lbl_wanphra, &thai_sarabun_24, LV_PART_MAIN);
+    lv_obj_set_style_text_font(g_lbl_wanphra, &thai_sarabun_stacked_24, LV_PART_MAIN);
     lv_obj_align(g_lbl_wanphra, LV_ALIGN_TOP_RIGHT, -16, 16);
 
     g_dot_wanphra = lv_obj_create(bar);

@@ -1,7 +1,7 @@
 ﻿# Digital Calendar Pi — Project Context
 
 > **Single source of truth** for the Pi Zero W Digital Calendar project.
-> Last updated: **May 9, 2026** (Phase 2.2.5 / 2.2.6 / 2.2.8 / 2.2.9 batch — pending verify)
+> Last updated: **May 9, 2026** (Phase 2.2.5d — bigger mini cal + grid + weather stub + ccache adoption)
 
 ---
 
@@ -57,6 +57,13 @@ OS
 
 ```
 D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
+├── .claude/
+│   └── skills/
+│       └── pi-lvgl-build-workflow/
+│           └── SKILL.md                 (Phase 2.2.5d — captured workflow gotchas
+│                                         for future AI sessions: ccache rule, sync
+│                                         v2, network failure tree, LVGL 9 idioms,
+│                                         Thai stacked-font rule)
 ├── CMakeLists.txt                       (433 lines — lv_port_linux template + our additions)
 ├── lv_conf.defaults                     (85 lines — LVGL config, KEEP AS-IS)
 ├── README.md                            (template README)
@@ -116,11 +123,14 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 | 2.2.2-OPT Strip lv_conf | REVERTED | May 8 | Black screen — see Section 9 |
 | **2.2.3** Thai calendar logic | DONE | May 9 | Ported `thai_calendar.{h,cpp}` verbatim from ESP32. Self-test on Pi verified all 6 reference dates match myhora.com (lunar/zodiac/leap year). Git initialised. |
 | **2.2.4** Real time | DONE | May 9 | `mini_calendar.cpp` now reads `time(NULL)` + `localtime_r()` for today/DOW/days/title. Subtitle in `theme.cpp` updated to "Phase 2.2.4 - Real Time". Visual diff verified on HDMI (today highlight moved from hardcoded 8 → 9). Midnight auto-refresh deferred. |
-| 2.2.5 Tulip background | BATCH-A pending verify | May 9 | bg_tulip.c image (4.49 MB, 800x480 RGB565 ported from ESP32), full-screen via `LV_IMAGE_ALIGN_STRETCH`. mini_calendar/upcoming/timer cards translucent (opa 220). |
-| 2.2.6 Header | BATCH-A pending verify | May 9 | `header.{h,cpp}` — weekday/date/lunar/clock/wanphra. 1 Hz lv_timer in main.c → `header_tick()` updates clock per-second, others on day_changed. |
-| 2.2.7 Weather card | PENDING (Batch B) | — | OpenWeather API, libcurl |
-| 2.2.8 Upcoming holidays | BATCH-A pending verify | May 9 | `upcoming.{h,cpp}` — scans 90 days via `thai_calendar_*`, sorts ascending, shows up to 5 with offset chip. Snapshot at build (no midnight refresh yet). |
-| 2.2.9 Timer | BATCH-A pending verify | May 9 | `timer_card.{h,cpp}` — visual placeholder (bell + "Tap to set"). State machine + popup + buzzer deferred (need GPIO/audio HAT). |
+| **2.2.5** Tulip background | DONE | May 9 | bg_tulip.c image (4.49 MB, 800x480 RGB565 ported from ESP32), full-screen via `LV_IMAGE_ALIGN_STRETCH`. mini_calendar/upcoming/timer cards translucent (opa 220). |
+| **2.2.5b** Native-res wallpaper | DONE | May 9 | Calendarbackground_2.jpg → bg_calendar.c (1920x1080 RGB565, 24.5 MB source) — replaces upscaled bg_tulip. PowerShell + System.Drawing + LockBits + inline C# (~2 sec generate). 1920x1080 layout with EDGE_MARGIN=60 to dodge TV overscan. |
+| **2.2.5c** Clock zoomed | DONE | May 9 | `header.cpp` clock label uses `transform_scale_x=460/y=384` (1.8x × 1.5x) to clear the Montserrat 48 builtin ceiling. Asymmetric per Lek's spec — wider than tall. |
+| **2.2.5d** Layout overhaul + stacked Thai font | DONE | May 9 | Mini calendar 1100×720 → **1368×832** (left edge to x=24, bottom matches right column). Day numbers font 36 → **48** (max builtin). Per-cell **grid lines** (right+bottom border, share with neighbours). DOW headers **2.2x transform_scale** so they're larger than day numbers. Timer card **removed permanently** (state machine + buzzer deferred indefinitely). **Weather card stub** added at top right (libcurl wiring is Phase 2.2.7-NET). All UI labels swept from `thai_sarabun_24` → `thai_sarabun_stacked_24` to fix tone-mark stacking on words like ที่/นี้/ขึ้น. **ccache** installed on Pi and wired in CMakeLists. **CMAKE_BUILD_TYPE** pinned in CMakeLists. |
+| **2.2.6** Header | DONE | May 9 | `header.{h,cpp}` — weekday/date/lunar/clock/wanphra. 1 Hz lv_timer in main.c → `header_tick()` updates clock per-second, others on day_changed. |
+| 2.2.7 Weather card (NET) | PENDING (Batch B) | — | Replace stub with libcurl + cJSON Open-Meteo client + 5-min refresh on lv_timer in worker thread |
+| **2.2.8** Upcoming holidays | DONE | May 9 | `upcoming.{h,cpp}` — scans 90 days via `thai_calendar_*`, sorts ascending, shows up to 5 with offset chip. Snapshot at build (no midnight refresh yet). |
+| 2.2.9 Timer | REMOVED | May 9 | Card removed permanently; will revisit if/when GPIO + audio HAT is decided. |
 | 2.2.10 Sidebar tabs | PENDING (Batch C) | — | Home / Month / Settings — port `ui_charts.cpp` + `ui_settings.cpp` |
 | 2.2.5 Tulip background | PENDING | — | bg_tulip.c image, translucent cards |
 | 2.2.6 Header | PENDING | — | Weekday + date + clock + wanphra |
@@ -192,16 +202,19 @@ alias calhealth='vcgencmd get_throttled; vcgencmd measure_temp; uptime'
 
 ## 8. Build Time Reality
 
-**Important:** "Incremental build is fast" is true in theory, but our workflow rarely hits that path because we frequently touch `CMakeLists.txt` or `lv_conf.defaults`.
+After Phase 2.2.5d adopted **ccache** + **sync_to_pi.ps1 v2** (checksum-aware) + **CMAKE_BUILD_TYPE pinned in CMakeLists**, real-world Pi Zero W build cycles look like this:
 
-| Scenario | Build time |
-|---|---|
-| Fresh / clean build | 30–60 min |
-| `lv_conf.defaults` changed | 25–40 min (full LVGL recompile) |
-| `CMakeLists.txt` changed (add new source file) | 25–40 min |
-| Source-only edit (`.cpp/.h/.c`) | 30 sec – 2 min ✅ |
+| Scenario | Time | Why |
+|---|---|---|
+| First build ever (cache empty) | ~70 min | LVGL ~600 files compile + ccache populates |
+| `lv_conf.defaults` changed | ~50 min | LVGL config invalidates ALL `.o` (ccache cannot help — different flags) |
+| `CMakeLists.txt` changed + ccache populated | **~3-5 min** ⚡ | CMake regenerates, but ccache hits replay LVGL `.o` instantly |
+| Source-only edit (`.cpp/.h/.c`) | **20-60 sec** ⚡ | sync v2 only copies the changed file, make recompiles 1 `.o` + relink |
+| `cmake ..` without `-DCMAKE_BUILD_TYPE=Release` | ~70 min | Build type defaults to empty/Debug → all `.o` invalidated. **Don't do this.** Pin in CMakeLists instead (already done in this project as of 2.2.5d). |
 
-**Implication:** Phase 2.2.x phases that add new source files (most of them) trigger full rebuild. This is why a Desktop simulator (build in 2–5 sec) is on the roadmap.
+**Rule of thumb:** if "incremental" feels longer than ~5 min, *something is invalidating cache*. Investigate immediately — don't accept it as "Pi Zero W is just slow".
+
+**Pre-2.2.5d numbers (kept for context):** before ccache + sync v2, every CMakeLists.txt edit took ~70 min and even pure source edits took ~30 min because sync v1 bumped mtime of CMakeLists/lv_conf.defaults → CMake regenerated lv_conf.h → cascade. The 200x speed-up (60 min → 18 sec on a no-op rebuild) was verified end-to-end on May 9.
 
 ---
 
@@ -351,4 +364,9 @@ When resuming work:
 - **2026-05-09** — `sync_to_pi.ps1` and `build_pi.ps1` now read `$env:PI_HOST` (override) → fall back to `digitalcal-pi.local` (mDNS).
 - **2026-05-09** — Phase 2.2.5 background uses `LV_IMAGE_ALIGN_STRETCH` (LVGL 9 idiom) — earlier `lv_image_set_scale_x/y` left widget bbox at 800x480 and the stretched pixels were clipped.
 - **2026-05-09** — Switched build process to **batch by phase**: realistic full-rebuild on Pi Zero W is ~1 hour (not 5-10 min as initially estimated). Plan future work as Batch A (UI: 2.2.5/6/8/9), Batch B (network: 2.2.7), Batch C (refactor: 2.2.10) so each only triggers one full rebuild instead of one per sub-phase.
-- **2026-05-09** — Phase 2.2.9 timer card: visual placeholder only (bell + "Tap to set"). State machine + popup + buzzer deferred — needs explicit GPIO/audio HAT decision.
+- **2026-05-09** — Phase 2.2.9 timer card: REMOVED permanently. The card was a visual placeholder; the actual feature (countdown + buzzer) needs a GPIO/audio HAT decision that hasn't been made.
+- **2026-05-09 (2.2.5d)** — Native-resolution wallpaper: regenerate `bg_calendar.c` directly at 1920x1080 RGB565 from `Calendarbackground_2.jpg`. Avoids the 2.4x upscale blur of the old bg_tulip.
+- **2026-05-09 (2.2.5d)** — Sweep `thai_sarabun_24` → `thai_sarabun_stacked_24` for every UI label. The stacked variant raises tone marks +6 px so words like ที่ / นี้ / ขึ้น render correctly. Same character range, 4 px taller line_height.
+- **2026-05-09 (2.2.5d)** — **ccache + CMAKE_BUILD_TYPE pin** adopted as a permanent fixture. Cuts CMakeLists-touching rebuilds from 70 min → 3-5 min. Trade-off: first build with ccache empty still takes ~70 min, but only once.
+- **2026-05-09 (2.2.5d)** — `sync_to_pi.ps1` v2 (checksum-aware) committed. Skip-if-MD5-matches; never regress to v1. Verified at end-to-end: 39/40 files skipped on a no-op sync, full rebuild dropped from 60 min to 18 sec.
+- **2026-05-09 (2.2.5d)** — Captured the day's lessons in `.claude/skills/pi-lvgl-build-workflow/SKILL.md` so the next AI session inherits all the workflow gotchas (ccache mandate, sync v2, network failure tree, LVGL 9 idioms, Thai stacked-font rule).

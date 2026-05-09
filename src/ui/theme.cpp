@@ -64,7 +64,7 @@ extern "C" void theme_init(theme_mode_t mode)
 #include "mini_calendar.h"
 #include "header.h"
 #include "upcoming.h"
-#include "timer_card.h"
+#include "weather.h"
 #include "../assets/bg_calendar.h"
 
 /* Native screen size — Samsung 27" HDMI framebuffer is 1920x1080.
@@ -91,24 +91,29 @@ extern "C" void theme_init(theme_mode_t mode)
  */
 #undef HDR_H      /* layout.h had HDR_H=90 for the 800x480 build */
 #define HDR_H            130
-#define COL_GAP          32
-#define EDGE_MARGIN      60   /* cushion against TV overscan */
+#define COL_GAP          24
+#define EDGE_MARGIN_L    24    /* tight against left edge per Lek's markup */
+#define EDGE_MARGIN_R    24
 
-/* Right column for upcoming + timer cards */
-#define RIGHT_W          540
-#define RIGHT_X          (SCREEN_W - RIGHT_W - EDGE_MARGIN)   /* = 1320 */
+/* Right column: weather (top) + upcoming (bottom), shared bottom edge */
+#define RIGHT_W          480
+#define RIGHT_X          (SCREEN_W - RIGHT_W - EDGE_MARGIN_R)   /* = 1416 */
+#define COLS_BOTTOM_Y    986   /* shared bottom for both columns */
 
-#define MINI_X           140    /* centre-ish in left zone (60..1320) */
-#define MINI_Y           (HDR_H + COL_GAP)
+#define MINI_X           EDGE_MARGIN_L              /* 24 */
+#define MINI_Y           (HDR_H + COL_GAP)          /* 154 */
+/* Mini card width/height are set inside mini_calendar.cpp.
+ * Keep MINI_CARD_W / MINI_CARD_H there in sync with this Y range. */
+
+#define WEATHER_X        RIGHT_X
+#define WEATHER_Y        (HDR_H + COL_GAP)          /* 154 */
+#define WEATHER_W        RIGHT_W
+#define WEATHER_H        300
 
 #define UPCOMING_X       RIGHT_X
-#define UPCOMING_Y       (HDR_H + COL_GAP)
+#define UPCOMING_Y       (WEATHER_Y + WEATHER_H + COL_GAP)   /* 478 */
 #define UPCOMING_W       RIGHT_W
-#define UPCOMING_H       620
-#define TIMER_X          RIGHT_X
-#define TIMER_Y          (UPCOMING_Y + UPCOMING_H + COL_GAP)
-#define TIMER_W          RIGHT_W
-#define TIMER_H          200
+#define UPCOMING_H       (COLS_BOTTOM_Y - UPCOMING_Y)        /* 508 */
 
 extern "C" void build_foundation_ui(void)
 {
@@ -129,19 +134,19 @@ extern "C" void build_foundation_ui(void)
     /* ── Header bar (top) ── */
     header_build(scr, 0, 0, SCREEN_W, HDR_H);
 
-    /* ── Mini calendar — left of column 3 ── */
+    /* ── Mini calendar (left, tight to edge, stretches down to COLS_BOTTOM_Y) ── */
     mini_calendar_build(scr, MINI_X, MINI_Y);
 
-    /* ── Upcoming holidays card (right column, top) ── */
-    upcoming_build(scr, UPCOMING_X, UPCOMING_Y, UPCOMING_W, UPCOMING_H);
+    /* ── Weather card (right column, top) — Phase 2.2.7 stub ── */
+    weather_build(scr, WEATHER_X, WEATHER_Y, WEATHER_W, WEATHER_H);
 
-    /* ── Timer card (right column, bottom) ── */
-    timer_card_build(scr, TIMER_X, TIMER_Y, TIMER_W, TIMER_H);
+    /* ── Upcoming holidays card (right column, bottom) ── */
+    upcoming_build(scr, UPCOMING_X, UPCOMING_Y, UPCOMING_W, UPCOMING_H);
 
     /* ── Phase marker (bottom-left, faint) ── */
     lv_obj_t *subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle, "Phase 2.2.5b - 1920x1080 layout");
+    lv_label_set_text(subtitle, "Phase 2.2.5d - widget bigger + grid + weather stub");
     lv_obj_set_style_text_color(subtitle, C_TEXT_HINT, LV_PART_MAIN);
     lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(subtitle, LV_ALIGN_BOTTOM_LEFT, EDGE_MARGIN, -16);
+    lv_obj_align(subtitle, LV_ALIGN_BOTTOM_LEFT, EDGE_MARGIN_L, -16);
 }

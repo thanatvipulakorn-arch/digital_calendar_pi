@@ -73,18 +73,23 @@ static cal_today_t cal_today_snapshot(void)
 }
 
 /* ──────────── Layout tokens ──────────── */
-/* Phase 2.2.5b — bumped from 700x500 to 1100x720 to fill the 1920x1080
- * Samsung 27" panel proportionally. Cell size scales automatically from
- * the card dimensions. */
-#define MINI_CARD_W          1100
-#define MINI_CARD_H          720
+/* Phase 2.2.5d — pulled left edge in (theme.cpp anchors at x=24) and
+ * stretched bottom down to y=986 (= the right column's bottom) per
+ * Lek's red markup. Day cells become roughly 188 x 110 px, fitting the
+ * Montserrat 48 day numbers comfortably. */
+#define MINI_CARD_W          1368
+#define MINI_CARD_H          832
 
 #define MINI_TITLE_H         60
-#define MINI_DOW_H           50
+#define MINI_DOW_H           60
 #define MINI_LEGEND_H        36
 #define MINI_GRID_ROWS       6
 
 #define MINI_INNER_PAD       20
+
+/* Grid line styling (Phase 2.2.5d) */
+#define MINI_GRID_COLOR      lv_color_hex(0x506070)
+#define MINI_GRID_OPA        LV_OPA_50
 #define MINI_INNER_W         (MINI_CARD_W - 2 * MINI_INNER_PAD)
 #define MINI_CELL_W          (MINI_INNER_W / 7)
 #define MINI_GRID_AVAIL      (MINI_CARD_H - 2 * MINI_INNER_PAD - MINI_TITLE_H - MINI_DOW_H - MINI_LEGEND_H)
@@ -99,49 +104,56 @@ static cal_today_t cal_today_snapshot(void)
 /* "พฤษภาคม 2569" — May 2026 = พ.ศ. 2569 */
 
 /* ──────────── Build a single day cell ──────────── */
+/* Phase 2.2.5d: each cell is now its own bordered container so the grid
+ * lines come for free — adjacent cells share their right/bottom borders.
+ * Day number is montserrat_48 (the largest builtin), centred in the cell. */
 static void build_day_cell(lv_obj_t *parent, int day, int row, int col, bool is_today)
 {
     int x = MINI_INNER_PAD + col * MINI_CELL_W;
     int y = MINI_INNER_PAD + MINI_GRID_Y + row * MINI_CELL_H;
 
-    /* Today: filled cyan rounded box */
+    /* Cell container — provides the table grid border */
+    lv_obj_t *cell = lv_obj_create(parent);
+    lv_obj_remove_style_all(cell);                  /* wipe theme defaults */
+    lv_obj_set_size(cell, MINI_CELL_W, MINI_CELL_H);
+    lv_obj_set_pos(cell, x, y);
+    lv_obj_set_style_border_color(cell, MINI_GRID_COLOR, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(cell, MINI_GRID_OPA, LV_PART_MAIN);
+    lv_obj_set_style_border_width(cell, 1, LV_PART_MAIN);
+    /* Right + bottom only → adjacent cells share lines, no doubled-up
+     * borders. Top/left of the grid are the card's inner padding edge. */
+    lv_obj_set_style_border_side(cell,
+        (lv_border_side_t)(LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM),
+        LV_PART_MAIN);
+    lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(cell, LV_OBJ_FLAG_CLICKABLE);
+
+    /* Today: filled cyan rounded box centred inside the cell */
     if (is_today) {
-        lv_obj_t *highlight = lv_obj_create(parent);
-        lv_obj_set_size(highlight, MINI_CELL_W - 8, MINI_CELL_H - 8);
-        lv_obj_set_pos(highlight, x + 4, y + 4);
+        lv_obj_t *highlight = lv_obj_create(cell);
+        lv_obj_remove_style_all(highlight);
+        lv_obj_set_size(highlight, MINI_CELL_W - 16, MINI_CELL_H - 16);
+        lv_obj_center(highlight);
         lv_obj_set_style_bg_color(highlight, C_ACCENT, LV_PART_MAIN);
         lv_obj_set_style_bg_opa(highlight, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_border_width(highlight, 0, LV_PART_MAIN);
-        lv_obj_set_style_radius(highlight, 12, LV_PART_MAIN);
+        lv_obj_set_style_radius(highlight, 16, LV_PART_MAIN);
         lv_obj_clear_flag(highlight, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_clear_flag(highlight, LV_OBJ_FLAG_CLICKABLE);
     }
 
-    /* Day number label */
-    lv_obj_t *lbl = lv_label_create(parent);
+    /* Day number label — centred, montserrat_48 (max builtin) */
+    lv_obj_t *lbl = lv_label_create(cell);
     char buf[8];
     snprintf(buf, sizeof(buf), "%d", day);
     lv_label_set_text(lbl, buf);
 
-    /* Color: today = navy on cyan, weekend = pink, weekday = white */
     lv_color_t color;
-    if (is_today) {
-        color = C_BG_PRIMARY;  /* dark navy on cyan = high contrast */
-    } else if (col == 0 || col == 6) {
-        /* Weekend: salmon pink */
-        color = lv_color_hex(0xFF7A8C);
-    } else {
-        color = C_TEXT_PRIMARY;
-    }
+    if (is_today)                       color = C_BG_PRIMARY;       /* navy on cyan */
+    else if (col == 0 || col == 6)      color = lv_color_hex(0xFF7A8C); /* weekend pink */
+    else                                color = C_TEXT_PRIMARY;
     lv_obj_set_style_text_color(lbl, color, LV_PART_MAIN);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_36, LV_PART_MAIN);
-
-    /* Center the number in the cell — pad_top half the cell height minus
-     * half the font height (montserrat_36 ≈ 36 px tall). */
-    lv_obj_set_size(lbl, MINI_CELL_W, MINI_CELL_H);
-    lv_obj_set_pos(lbl, x, y);
-    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_pad_top(lbl, MINI_CELL_H / 2 - 22, LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_48, LV_PART_MAIN);
+    lv_obj_center(lbl);
 }
 
 /* ──────────── Public API ──────────── */
@@ -175,7 +187,7 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
              td.year_be);
     lv_label_set_text(title, title_buf);
     lv_obj_set_style_text_color(title, C_TEXT_PRIMARY, LV_PART_MAIN);
-    lv_obj_set_style_text_font(title, &thai_sarabun_24, LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, &thai_sarabun_stacked_24, LV_PART_MAIN);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
 
     /* ── Nav buttons (right side, visual only) ── */
@@ -197,20 +209,38 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
     lv_obj_set_style_text_font(nav_next, &lv_font_montserrat_40, LV_PART_MAIN);
     lv_obj_align(nav_next, LV_ALIGN_TOP_RIGHT, 0, 0);
 
-    /* ── DOW headers (Thai) ── */
+    /* ── DOW headers (Thai), wrapped in cell containers for grid border ── */
     /* "อา จ อ พ พฤ ศ ส" — short Thai weekday names */
     for (int i = 0; i < 7; i++) {
-        lv_obj_t *dow = lv_label_create(card);
+        int x = MINI_INNER_PAD + i * MINI_CELL_W;
+        int y = MINI_INNER_PAD + MINI_DOW_Y;
+
+        /* DOW cell container — bordered like day cells */
+        lv_obj_t *dow_cell = lv_obj_create(card);
+        lv_obj_remove_style_all(dow_cell);
+        lv_obj_set_size(dow_cell, MINI_CELL_W, MINI_DOW_H);
+        lv_obj_set_pos(dow_cell, x, y);
+        lv_obj_set_style_border_color(dow_cell, MINI_GRID_COLOR, LV_PART_MAIN);
+        lv_obj_set_style_border_opa(dow_cell, MINI_GRID_OPA, LV_PART_MAIN);
+        lv_obj_set_style_border_width(dow_cell, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_side(dow_cell,
+            (lv_border_side_t)(LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM),
+            LV_PART_MAIN);
+        lv_obj_clear_flag(dow_cell, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(dow_cell, LV_OBJ_FLAG_CLICKABLE);
+
+        lv_obj_t *dow = lv_label_create(dow_cell);
         lv_label_set_text(dow, THAI_WEEKDAY_SHORT[i]);
         /* Sun (0) and Sat (6) = pink, others = muted */
         lv_color_t c = (i == 0 || i == 6) ? lv_color_hex(0xFF7A8C) : C_TEXT_MUTED;
         lv_obj_set_style_text_color(dow, c, LV_PART_MAIN);
-        lv_obj_set_style_text_font(dow, &thai_sarabun_24, LV_PART_MAIN);
-
-        /* Center within cell */
-        lv_obj_set_size(dow, MINI_CELL_W, MINI_DOW_H);
-        lv_obj_set_pos(dow, i * MINI_CELL_W, MINI_DOW_Y);
-        lv_obj_set_style_text_align(dow, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        lv_obj_set_style_text_font(dow, &thai_sarabun_stacked_24, LV_PART_MAIN);
+        /* Phase 2.2.5d — DOW headers must be larger than day numbers per Lek.
+         * Day numbers are montserrat_48; Thai font tops out at sarabun 24,
+         * so scale 2.2x = effective 53 px > 48. */
+        lv_obj_set_style_transform_scale_x(dow, 563, LV_PART_MAIN);
+        lv_obj_set_style_transform_scale_y(dow, 563, LV_PART_MAIN);
+        lv_obj_center(dow);
     }
 
     /* ── Day cells ── */

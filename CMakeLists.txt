@@ -4,6 +4,25 @@ project(lvgl)
 option(WERROR "Treat warnings as errors for LVGL targets" OFF)
 option(ASAN "Enable Sanitizer Options" OFF)
 
+# ---- Phase 2.2.5d: pin build type so a bare `cmake ..` doesn't quietly
+# downgrade to Debug and invalidate every cached .o (we lost ~70 min once).
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+endif()
+
+# ---- Phase 2.2.5d: ccache makes incremental builds resilient to CMake
+# regeneration. Without it, every CMakeLists touch (e.g. adding a new
+# source file at a phase boundary) triggers a full LVGL recompile (~70
+# min on Pi Zero W). With ccache, the same situation finishes in ~1 min
+# because object hashes match → cached .o reused. Safe: ccache caches by
+# content hash of source + flags + compiler binary; collisions are
+# astronomically unlikely. Reset with `ccache -C` if ever suspicious.
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    message(STATUS "ccache found: ${CCACHE_PROGRAM}")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+endif()
+
 # Set policy to allow to run the target_link_libraries cmd on targets that are build
 # in another directory.
 # Currently, the linking is not handled by env_support/cmake/os.cmake
@@ -412,12 +431,17 @@ add_executable(lvglsim
     src/ui/mini_calendar.cpp
     src/ui/header.cpp
     src/ui/upcoming.cpp
-    src/ui/timer_card.cpp
+    src/ui/weather.cpp
     src/calendar/thai_calendar.cpp
     src/assets/thai_sarabun_24.c
+    src/assets/thai_sarabun_stacked_24.c
     src/assets/bg_calendar.c)
-# bg_tulip.c kept on disk for git history but no longer compiled
-# (replaced by bg_calendar at native 1920x1080 — Phase 2.2.5b)
+# Phase 2.2.5d:
+#   - timer_card.* removed permanently (was a placeholder; will revisit
+#     when we have a GPIO/audio HAT decision)
+#   - weather.cpp added as a visual stub; libcurl wiring lives in
+#     Phase 2.2.7-NET (next batch)
+# bg_tulip.c stays on disk for git history but is not compiled.
 
 # Repeat lvgl_linux to resolve circular dependency with lvgl
 target_link_libraries(lvglsim lvgl_linux lvgl lvgl_linux)

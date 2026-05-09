@@ -110,14 +110,17 @@ if ($Force) {
         $_.Remote -replace '^~/digital_calendar_pi', $proj_remote_abs
     }
 
-    # Single ssh: md5sum every candidate. Missing files go to stderr -- we
-    # don't care, the regex below filters anything that isn't <hash> <path>.
-    # PS5.1 chokes on `2>/dev/null` inside a "+"-built double-quoted string,
-    # so build the inner argument from a variable and suppress ssh stderr
-    # at the PowerShell level instead.
+    # Single ssh: md5sum every candidate. Missing files (new on Windows,
+    # not yet on Pi) make md5sum exit non-zero, which PowerShell's strict
+    # ErrorActionPreference would turn into a script-stopping error -- so
+    # we relax the preference, redirect stderr into stdout, and let the
+    # regex filter below keep only the lines that are actually hashes.
     $quoted_paths = ($remote_paths | ForEach-Object { "'" + $_ + "'" }) -join " "
     $cmd = "md5sum -- $quoted_paths"
-    $remote_output = ssh $pi $cmd 2>$null
+    $saved_eap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $remote_output = & ssh $pi $cmd 2>&1
+    $ErrorActionPreference = $saved_eap
 
     # Parse "<hash>  <path>" into a hashtable
     $remote_hashes = @{}
