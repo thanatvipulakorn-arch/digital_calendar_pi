@@ -1,7 +1,7 @@
 ﻿# Digital Calendar Pi — Project Context
 
 > **Single source of truth** for the Pi Zero W Digital Calendar project.
-> Last updated: **May 9, 2026** (Phase 2.2.5d — bigger mini cal + grid + weather stub + ccache adoption)
+> Last updated: **May 9, 2026 (end of session)** — Phase 2.2.5h committed, visual verification of 2.2.5h pending in next session.
 
 ---
 
@@ -127,6 +127,10 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 | **2.2.5b** Native-res wallpaper | DONE | May 9 | Calendarbackground_2.jpg → bg_calendar.c (1920x1080 RGB565, 24.5 MB source) — replaces upscaled bg_tulip. PowerShell + System.Drawing + LockBits + inline C# (~2 sec generate). 1920x1080 layout with EDGE_MARGIN=60 to dodge TV overscan. |
 | **2.2.5c** Clock zoomed | DONE | May 9 | `header.cpp` clock label uses `transform_scale_x=460/y=384` (1.8x × 1.5x) to clear the Montserrat 48 builtin ceiling. Asymmetric per Lek's spec — wider than tall. |
 | **2.2.5d** Layout overhaul + stacked Thai font | DONE | May 9 | Mini calendar 1100×720 → **1368×832** (left edge to x=24, bottom matches right column). Day numbers font 36 → **48** (max builtin). Per-cell **grid lines** (right+bottom border, share with neighbours). DOW headers **2.2x transform_scale** so they're larger than day numbers. Timer card **removed permanently** (state machine + buzzer deferred indefinitely). **Weather card stub** added at top right (libcurl wiring is Phase 2.2.7-NET). All UI labels swept from `thai_sarabun_24` → `thai_sarabun_stacked_24` to fix tone-mark stacking on words like ที่/นี้/ขึ้น. **ccache** installed on Pi and wired in CMakeLists. **CMAKE_BUILD_TYPE** pinned in CMakeLists. |
+| **2.2.5e** Degree-symbol tofu + headline | DONE | May 9 | Weather "°C" was rendering as ☐ — Thai font's range is 32-127 + 3584-3711, no Latin-1. Split the temp unit and feels-like meta into Thai-font + Montserrat-font label pairs. Upcoming title bumped to C_ACCENT (cyan) + 1.4x scale. |
+| **2.2.5f** DOW colours, size, alignment | DONE | May 9 | Per-day Thai colour palette: อา/ส = red (0xFF7A8C, kept); จ = yellow; อ = pink; พ = green; พฤ = orange; ศ = blue. DOW scale 2.2x → 2.8x; cell height 80 → 100; aligned TOP_MID (offset 18) instead of centre. |
+| **2.2.5g** Upcoming row spacing | DONE | May 9 | row_h 38 → 56, row_y0 44 → 80 (clearance for scaled headline + breathing room). |
+| **2.2.5h** Card translucency + grid line visibility | DONE (visual verify pending) | May 9 | All cards bg_opa 220 → 170 (~67%); header bar 200 → 160. Grid lines 0x506070/LV_OPA_50 → 0xE0EFFF/200 (light blue-white at 78%). Lek hadn't confirmed the visual on HDMI before the session ended — first thing to check on resume. |
 | **2.2.6** Header | DONE | May 9 | `header.{h,cpp}` — weekday/date/lunar/clock/wanphra. 1 Hz lv_timer in main.c → `header_tick()` updates clock per-second, others on day_changed. |
 | 2.2.7 Weather card (NET) | PENDING (Batch B) | — | Replace stub with libcurl + cJSON Open-Meteo client + 5-min refresh on lv_timer in worker thread |
 | **2.2.8** Upcoming holidays | DONE | May 9 | `upcoming.{h,cpp}` — scans 90 days via `thai_calendar_*`, sorts ascending, shows up to 5 with offset chip. Snapshot at build (no midnight refresh yet). |
@@ -338,15 +342,45 @@ D:\MY WORK\MY EMBEDED PROJECT\ESP32\digital_calendar\
 
 ## 12. Next Session Checklist
 
-When resuming work:
+**Resume order, top to bottom:**
 
-1. **Verify still working:** `ssh thanat@192.168.0.232` → `cal` → see Thai mini calendar on HDMI.
-2. **Check Pi storage:** `df -h /` (need >2 GB free for builds).
-3. **Pull latest from Windows:** `.\sync_to_pi.ps1` (covers any out-of-date file).
-4. **Decide next phase:**
-   - **2.2.3** if continuing UI features (faster ROI)
-   - **WSL2 + Desktop simulator setup** if planning many UI iterations (better long-term)
-5. **Open this file** for reference.
+### A. Quick verify the Pi is in the state we left it
+
+1. **SSH reachable.** Default to Ethernet `192.168.1.107`; fall back to mDNS `digitalcal-pi.local`. The `sync_to_pi.ps1` / `build_pi.ps1` scripts already honour `$env:PI_HOST` overrides.
+2. **lvglsim binary built.** `ssh thanat@192.168.1.107 "ls -la ~/digital_calendar_pi/build/bin/lvglsim"` — the May 9 session ended with binary built and tmux session `app` running it.
+3. **HDMI screen.** Should show: header (clock/date/lunar/wanphra), Phase-2.2.5h-translucent mini calendar (1368×832 with light blue-white grid lines), Weather stub top-right, Upcoming holidays bottom-right. Subtitle bottom-left: "Phase 2.2.5d - widget bigger + grid + weather stub" (subtitle string didn't get bumped past 2.2.5d — cosmetic).
+4. **ccache.** `ssh thanat@192.168.1.107 "ccache -s | head -8"` — should show ~590 cacheable / mostly hits. If cache empty for some reason, the next CMakeLists touch is back to ~70 min.
+
+### B. Lek's visual verification of 2.2.5h (if not done yet)
+
+The session ended right after 2.2.5h was built and `lvglsim` restarted, but Lek didn't confirm the screen. Three checks:
+
+- 🪟 **Card translucency** — wallpaper bleeds through more visibly than 2.2.5g
+- 📐 **Grid lines** — light blue-white, ~78% opa, fully continuous (no gaps)
+- 🌡️ **Weather "35°C"** — degree symbol renders (no ☐)
+
+If anything is off, iterate (~30-60 sec build cycle thanks to ccache + sync v2). If all good, **`git tag v0.2.5h`** and move on.
+
+### C. Decide next batch
+
+| Path | What | Build cost |
+|------|------|-----------|
+| **Phase 2.2.7-NET** (Batch B) | Replace weather stub with libcurl + cJSON + Open-Meteo. Needs `apt install libcurl4-openssl-dev` on Pi, then add to CMakeLists. Single batch of ~5-8 min build. | ~5-8 min once |
+| **Phase 2.2.10** (Batch C) | Sidebar tabs (Home / Month / Settings) — port `ui_charts.cpp` (~600 lines) and `ui_settings.cpp` (~700 lines) from ESP32. Big refactor. | ~10 min |
+| **WSL2 desktop simulator** (infra) | Build LVGL on Linux desktop instead of Pi for UI iteration. Section 13 has flagged this as highest-ROI infra investment for ages. With ccache now fixing build speed on Pi, the urgency is lower — but WSL2 cycle would be 2-5 sec, vs Pi's 30-60 sec. | One-time setup ~1-2 hr |
+| **2.2.4-MIDNIGHT** | Wire midnight rollover so the `mini_calendar` and `header` rebuild themselves at 00:00:00. Uses `header_tick`'s existing `day_changed` signal. Small. | ~30-60 sec |
+
+### D. Read these before doing anything risky
+
+- `.claude/skills/pi-lvgl-build-workflow/SKILL.md` — every workflow gotcha from May 9. Notable: don't run `cmake ..` without `-DCMAKE_BUILD_TYPE=Release` (now pinned in CMakeLists, but old habits); don't regress sync_to_pi.ps1 to v1; LVGL 9 needs casts on OR'd enums.
+- This file's §9 (Failed Experiments) — has the home-WiFi rabbit hole and the lv_conf strip story.
+
+### E. What was NOT touched today (carry-over from earlier sessions)
+
+- `src/main.cpp` orphan still on disk. Not compiled. Safe to delete with `git rm`.
+- Mini calendar **midnight refresh** still missing. Snapshot at build only.
+- Upcoming holidays **midnight refresh** still missing. Snapshot at build only.
+- Buzzer / GPIO timer feature — explicitly de-scoped (timer card removed in 2.2.5d).
 
 ---
 
