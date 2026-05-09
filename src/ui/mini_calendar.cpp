@@ -81,15 +81,20 @@ static cal_today_t cal_today_snapshot(void)
 #define MINI_CARD_H          832
 
 #define MINI_TITLE_H         60
-#define MINI_DOW_H           60
+/* MINI_DOW_H bumped to 100 in Phase 2.2.5f. DOW transform_scale is now
+ * 2.8x (effective ~67 px) and the labels are pinned to the top of the
+ * cell per Lek's spec — was previously 80 px / 2.2x / centred. */
+#define MINI_DOW_H           100
 #define MINI_LEGEND_H        36
 #define MINI_GRID_ROWS       6
 
 #define MINI_INNER_PAD       20
 
-/* Grid line styling (Phase 2.2.5d) */
-#define MINI_GRID_COLOR      lv_color_hex(0x506070)
-#define MINI_GRID_OPA        LV_OPA_50
+/* Grid line styling — Phase 2.2.5h: brighter + more opaque so the lines
+ * read as a real table grid against the busy tulip background. The old
+ * slate-blue at 50% opa was too close to the card's translucent navy. */
+#define MINI_GRID_COLOR      lv_color_hex(0xE0EFFF)
+#define MINI_GRID_OPA        ((lv_opa_t)200)        /* ~78% */
 #define MINI_INNER_W         (MINI_CARD_W - 2 * MINI_INNER_PAD)
 #define MINI_CELL_W          (MINI_INNER_W / 7)
 #define MINI_GRID_AVAIL      (MINI_CARD_H - 2 * MINI_INNER_PAD - MINI_TITLE_H - MINI_DOW_H - MINI_LEGEND_H)
@@ -171,7 +176,7 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
     lv_obj_set_size(card, MINI_CARD_W, MINI_CARD_H);
     lv_obj_set_pos(card, x, y);
     lv_obj_set_style_bg_color(card, C_BG_SECONDARY, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(card, 220, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(card, 170, LV_PART_MAIN);    /* Phase 2.2.5h: 220 → 170 (~67%) */
     lv_obj_set_style_border_color(card, C_BORDER, LV_PART_MAIN);
     lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(card, 16, LV_PART_MAIN);
@@ -210,7 +215,22 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
     lv_obj_align(nav_next, LV_ALIGN_TOP_RIGHT, 0, 0);
 
     /* ── DOW headers (Thai), wrapped in cell containers for grid border ── */
-    /* "อา จ อ พ พฤ ศ ส" — short Thai weekday names */
+    /* "อา จ อ พ พฤ ศ ส" — short Thai weekday names.
+     *
+     * Phase 2.2.5f: per-day Thai-tradition colours. อาทิตย์/เสาร์ keep
+     * the pink/red they had before (Lek's explicit ask: "ส ใช้แดงเหมือน
+     * เดิม"); weekdays get their traditional almsgiving colour so each
+     * column is visually distinct. */
+    static const uint32_t DOW_COLORS[7] = {
+        0xFF7A8C,  /* 0 อา (Sunday)    — red (kept) */
+        0xFFD54F,  /* 1 จ  (Monday)    — yellow */
+        0xEC407A,  /* 2 อ  (Tuesday)   — pink */
+        0x66BB6A,  /* 3 พ  (Wednesday) — green */
+        0xFB8C00,  /* 4 พฤ (Thursday)  — orange */
+        0x4FC3F7,  /* 5 ศ  (Friday)    — sky blue */
+        0xFF7A8C,  /* 6 ส  (Saturday)  — red (per Lek, not the traditional purple) */
+    };
+
     for (int i = 0; i < 7; i++) {
         int x = MINI_INNER_PAD + i * MINI_CELL_W;
         int y = MINI_INNER_PAD + MINI_DOW_Y;
@@ -231,16 +251,16 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
 
         lv_obj_t *dow = lv_label_create(dow_cell);
         lv_label_set_text(dow, THAI_WEEKDAY_SHORT[i]);
-        /* Sun (0) and Sat (6) = pink, others = muted */
-        lv_color_t c = (i == 0 || i == 6) ? lv_color_hex(0xFF7A8C) : C_TEXT_MUTED;
-        lv_obj_set_style_text_color(dow, c, LV_PART_MAIN);
+        lv_obj_set_style_text_color(dow, lv_color_hex(DOW_COLORS[i]), LV_PART_MAIN);
         lv_obj_set_style_text_font(dow, &thai_sarabun_stacked_24, LV_PART_MAIN);
-        /* Phase 2.2.5d — DOW headers must be larger than day numbers per Lek.
-         * Day numbers are montserrat_48; Thai font tops out at sarabun 24,
-         * so scale 2.2x = effective 53 px > 48. */
-        lv_obj_set_style_transform_scale_x(dow, 563, LV_PART_MAIN);
-        lv_obj_set_style_transform_scale_y(dow, 563, LV_PART_MAIN);
-        lv_obj_center(dow);
+        /* Phase 2.2.5f — bigger (2.8x → effective 67 px > day 48 px) and
+         * pinned near the top of the cell so the labels don't float in
+         * the middle. transform_scale rendering extends ~16 px above and
+         * below the bbox centre, so an offset of 18 from top puts the
+         * scaled glyph just inside the cell's top border. */
+        lv_obj_set_style_transform_scale_x(dow, 717, LV_PART_MAIN);  /* 2.8x */
+        lv_obj_set_style_transform_scale_y(dow, 717, LV_PART_MAIN);
+        lv_obj_align(dow, LV_ALIGN_TOP_MID, 0, 18);
     }
 
     /* ── Day cells ── */

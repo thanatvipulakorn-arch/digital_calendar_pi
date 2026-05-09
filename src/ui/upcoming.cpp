@@ -89,19 +89,24 @@ extern "C" void upcoming_build(lv_obj_t *parent, int x, int y, int w, int h)
     lv_obj_set_size(card, w, h);
     lv_obj_set_pos(card, x, y);
     lv_obj_set_style_bg_color(card, C_BG_SECONDARY, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(card, 220, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(card, 170, LV_PART_MAIN);    /* Phase 2.2.5h: more wallpaper bleed-through */
     lv_obj_set_style_border_color(card, C_BORDER, LV_PART_MAIN);
     lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(card, 16, LV_PART_MAIN);
     lv_obj_set_style_pad_all(card, 16, LV_PART_MAIN);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Title */
+    /* Title — headline style: scaled up 1.4x and accent-coloured to
+     * differentiate from the row text below (per Lek's spec 2.2.5e). */
     lv_obj_t *title = lv_label_create(card);
     lv_label_set_text(title, THAI_UPCOMING_HOL);
-    lv_obj_set_style_text_color(title, C_TEXT_PRIMARY, LV_PART_MAIN);
+    lv_obj_set_style_text_color(title, C_ACCENT, LV_PART_MAIN);
     lv_obj_set_style_text_font(title, &thai_sarabun_stacked_24, LV_PART_MAIN);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_set_style_transform_scale_x(title, 358, LV_PART_MAIN);   /* 1.4x */
+    lv_obj_set_style_transform_scale_y(title, 358, LV_PART_MAIN);
+    /* Account for the visual upscale by anchoring with a small left+top
+     * pad so the scaled glyphs aren't clipped at the card edge. */
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 8);
 
     /* Scan */
     upcoming_item_t items[UPCOMING_MAX];
@@ -117,9 +122,10 @@ extern "C" void upcoming_build(lv_obj_t *parent, int x, int y, int w, int h)
         return;
     }
 
-    /* Rows */
-    const int row_h = 38;
-    const int row_y0 = 44;
+    /* Rows — Phase 2.2.5g: row_h bumped 38→56 and row_y0 44→80 so the
+     * scaled-up headline has clearance and rows aren't crammed. */
+    const int row_h = 56;
+    const int row_y0 = 80;
 
     for (int i = 0; i < count; i++) {
         int row_y = row_y0 + i * row_h;

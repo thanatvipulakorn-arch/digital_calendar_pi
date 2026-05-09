@@ -31,7 +31,7 @@ extern "C" void weather_build(lv_obj_t *parent, int x, int y, int w, int h)
     lv_obj_set_size(card, w, h);
     lv_obj_set_pos(card, x, y);
     lv_obj_set_style_bg_color(card, C_BG_SECONDARY, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(card, 220, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(card, 170, LV_PART_MAIN);    /* Phase 2.2.5h: more wallpaper bleed-through */
     lv_obj_set_style_border_color(card, C_BORDER, LV_PART_MAIN);
     lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(card, 16, LV_PART_MAIN);
@@ -61,20 +61,36 @@ extern "C" void weather_build(lv_obj_t *parent, int x, int y, int w, int h)
     lv_obj_set_style_transform_scale_y(temp_value, 410, LV_PART_MAIN);
     lv_obj_align(temp_value, LV_ALIGN_CENTER, -30, 0);
 
-    /* Unit "°C" (smaller, sits next to the value) — thai_sarabun has the
-     * degree glyph; Montserrat builtin doesn't always include U+00B0. */
+    /* Unit "°C" — must be a font with U+00B0 (degree). thai_sarabun was
+     * built with range 32-127 + 3584-3711, so ° rendered as a tofu box.
+     * Montserrat builtin includes Latin-1 Supplement (160-255), so ° works. */
     lv_obj_t *temp_unit = lv_label_create(card);
     lv_label_set_text(temp_unit, "°C");
     lv_obj_set_style_text_color(temp_unit, C_ACCENT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(temp_unit, &thai_sarabun_stacked_24, LV_PART_MAIN);
+    lv_obj_set_style_text_font(temp_unit, &lv_font_montserrat_24, LV_PART_MAIN);
     lv_obj_align_to(temp_unit, temp_value, LV_ALIGN_OUT_RIGHT_MID, 16, -10);
 
-    /* Meta line (bottom) — feels like + humidity */
-    lv_obj_t *meta = lv_label_create(card);
-    char buf[96];
-    std::snprintf(buf, sizeof(buf), "%s 35  •  ความชื้น 65%%", THAI_FEELS_LIKE);
-    lv_label_set_text(meta, buf);
-    lv_obj_set_style_text_color(meta, C_TEXT_MUTED, LV_PART_MAIN);
-    lv_obj_set_style_text_font(meta, &thai_sarabun_stacked_24, LV_PART_MAIN);
-    lv_obj_align(meta, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    /* Meta line (bottom) — feels-like + humidity.
+     * "รู้สึกเหมือน" in Thai font + "35°C" in Montserrat (Thai font has
+     * no degree glyph, same reason as the temp_unit above). Two separate
+     * labels stitched with lv_obj_align_to. */
+    lv_obj_t *feels_th = lv_label_create(card);
+    char fbuf[48];
+    std::snprintf(fbuf, sizeof(fbuf), "%s", THAI_FEELS_LIKE);
+    lv_label_set_text(feels_th, fbuf);
+    lv_obj_set_style_text_color(feels_th, C_TEXT_MUTED, LV_PART_MAIN);
+    lv_obj_set_style_text_font(feels_th, &thai_sarabun_stacked_24, LV_PART_MAIN);
+    lv_obj_align(feels_th, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+
+    lv_obj_t *feels_val = lv_label_create(card);
+    lv_label_set_text(feels_val, " 35°C");
+    lv_obj_set_style_text_color(feels_val, C_TEXT_MUTED, LV_PART_MAIN);
+    lv_obj_set_style_text_font(feels_val, &lv_font_montserrat_24, LV_PART_MAIN);
+    lv_obj_align_to(feels_val, feels_th, LV_ALIGN_OUT_RIGHT_BOTTOM, 0, 0);
+
+    lv_obj_t *humid_label = lv_label_create(card);
+    lv_label_set_text(humid_label, "ความชื้น 65%");
+    lv_obj_set_style_text_color(humid_label, C_TEXT_MUTED, LV_PART_MAIN);
+    lv_obj_set_style_text_font(humid_label, &thai_sarabun_stacked_24, LV_PART_MAIN);
+    lv_obj_align(humid_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
 }

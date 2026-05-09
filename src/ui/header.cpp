@@ -44,7 +44,7 @@ extern "C" void header_build(lv_obj_t *parent, int x, int y, int w, int h)
     lv_obj_set_pos(bar, x, y);
     /* Translucent — let the tulip tone through, but readable */
     lv_obj_set_style_bg_color(bar, C_BG_PRIMARY, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(bar, 200, LV_PART_MAIN);    /* 78% */
+    lv_obj_set_style_bg_opa(bar, 160, LV_PART_MAIN);    /* Phase 2.2.5h: 200 → 160 (~63%) */
     lv_obj_set_style_border_color(bar, C_BORDER, LV_PART_MAIN);
     lv_obj_set_style_border_width(bar, 1, LV_PART_MAIN);
     lv_obj_set_style_border_side(bar, LV_BORDER_SIDE_BOTTOM, LV_PART_MAIN);
