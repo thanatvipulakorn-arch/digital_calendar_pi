@@ -35,6 +35,34 @@ static int g_last_sec  = -1;
 static int g_last_yday = -1;
 static int g_last_wday = -1;
 
+/* Phase 2.2.5p — WiFi SSID cache. Refreshed every 30 ticks (~30 sec)
+ * via `iwgetid -r` to keep the popen overhead off the per-second clock
+ * path. Empty string means no WiFi (e.g., Pi is on Ethernet only). */
+static char g_wifi_ssid[64] = "";
+static int  g_wifi_poll_cnt = 0;
+
+static void poll_wifi_ssid(void)
+{
+    /* `iwgetid` (wireless-tools) isn't installed on Pi OS Trixie — it
+     * ships NetworkManager instead. nmcli's machine-readable output
+     * "active:ssid", filtered with awk for the active=yes row, gives
+     * us the connected SSID even if it contains colons or spaces.
+     * popen/pclose are POSIX (not std::) — keep them unqualified. */
+    FILE *p = popen(
+        "nmcli -t -f active,ssid dev wifi 2>/dev/null"
+        " | awk -F: '$1==\"yes\"{print $2; exit}'",
+        "r");
+    if (!p) return;
+    char buf[64] = "";
+    if (std::fgets(buf, sizeof(buf), p)) {
+        char *nl = std::strchr(buf, '\n');
+        if (nl) *nl = '\0';
+    }
+    pclose(p);
+    std::strncpy(g_wifi_ssid, buf, sizeof(g_wifi_ssid) - 1);
+    g_wifi_ssid[sizeof(g_wifi_ssid) - 1] = '\0';
+}
+
 /* ──────────── Build ──────────── */
 extern "C" void header_build(lv_obj_t *parent, int x, int y, int w, int h)
 {
@@ -82,13 +110,22 @@ extern "C" void header_build(lv_obj_t *parent, int x, int y, int w, int h)
     lv_obj_set_style_text_font(g_lbl_clock, &lv_font_montserrat_48, LV_PART_MAIN);
     lv_obj_set_style_transform_scale_x(g_lbl_clock, 460, LV_PART_MAIN);  /* 1.8x */
     lv_obj_set_style_transform_scale_y(g_lbl_clock, 384, LV_PART_MAIN);  /* 1.5x */
+    /* Phase 2.2.5s — same pivot fix as the DOW labels: default top-left
+     * pivot was pushing the scaled clock to the right of the bar centre.
+     * 50%/50% keeps the scaled visual centred on the bbox centre. */
+    lv_obj_set_style_transform_pivot_x(g_lbl_clock, lv_pct(50), LV_PART_MAIN);
+    lv_obj_set_style_transform_pivot_y(g_lbl_clock, lv_pct(50), LV_PART_MAIN);
     lv_obj_align(g_lbl_clock, LV_ALIGN_TOP_MID, 0, 8);
 
     g_lbl_sync = lv_label_create(bar);
-    lv_label_set_text(g_lbl_sync, "");
-    lv_obj_set_style_text_color(g_lbl_sync, C_TEXT_HINT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(g_lbl_sync, &lv_font_montserrat_14, LV_PART_MAIN);
-    lv_obj_align(g_lbl_sync, LV_ALIGN_TOP_MID, 0, 64);
+    /* Phase 2.2.5s — recolor enabled so the WiFi icon can be green when
+     * connected / red when offline, independent of the surrounding text
+     * colour. Format: "#RRGGBB <icon># <ssid> - <ntp status>". */
+    lv_label_set_recolor(g_lbl_sync, true);
+    lv_label_set_text(g_lbl_sync, "#F44336 " LV_SYMBOL_WIFI "# (offline)");
+    lv_obj_set_style_text_color(g_lbl_sync, C_TEXT_PRIMARY, LV_PART_MAIN);
+    lv_obj_set_style_text_font(g_lbl_sync, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_align(g_lbl_sync, LV_ALIGN_TOP_MID, 0, 90);
 
     /* ── Right: วันพระ indicator ── */
     g_lbl_wanphra = lv_label_create(bar);
@@ -164,12 +201,34 @@ extern "C" void header_tick(void)
         lv_label_set_text(g_lbl_lunar, buf);
     }
 
-    /* NTP sync status — Linux: read /run/systemd/timesync/synchronized */
+    /* WiFi SSID + NTP sync — combined into one label below the clock
+     * (Phase 2.2.5p). SSID is re-polled every ~30 sec since `iwgetid`
+     * is a popen and shouldn't run every tick; NTP is a cheap fopen
+     * and runs every sec. The label is only rewritten when the merged
+     * string changes, so LVGL doesn't redraw on every tick. */
     if (g_lbl_sync && sec_changed) {
-        static char last[32] = "";
+        static char last[160] = "";
+        if (g_wifi_poll_cnt-- <= 0) {
+            g_wifi_poll_cnt = 30;
+            poll_wifi_ssid();
+        }
         FILE *f = std::fopen("/run/systemd/timesync/synchronized", "r");
-        const char *cur = f ? "NTP synced" : "NTP pending";
+        bool synced = (f != nullptr);
         if (f) std::fclose(f);
+
+        char cur[200];
+        const char *ntp = synced ? "NTP synced" : "NTP pending";
+        const bool wifi_up = (g_wifi_ssid[0] != '\0');
+        const char *icon_col = wifi_up ? "4CAF50" : "F44336";   /* green / red */
+        if (wifi_up) {
+            std::snprintf(cur, sizeof(cur),
+                "#%s " LV_SYMBOL_WIFI "# %s  -  %s",
+                icon_col, g_wifi_ssid, ntp);
+        } else {
+            std::snprintf(cur, sizeof(cur),
+                "#%s " LV_SYMBOL_WIFI "# (offline)  -  %s",
+                icon_col, ntp);
+        }
         if (std::strcmp(cur, last) != 0) {
             std::strncpy(last, cur, sizeof(last) - 1);
             last[sizeof(last) - 1] = '\0';

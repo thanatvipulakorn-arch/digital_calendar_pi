@@ -173,7 +173,7 @@ static void build_day_cell(lv_obj_t *parent, int day, int row, int col,
         lv_obj_remove_style_all(tint);
         lv_obj_set_size(tint, MINI_CELL_W - 4, MINI_CELL_H - 4);
         lv_obj_center(tint);
-        lv_obj_set_style_bg_color(tint, lv_color_hex(0xFFA726), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(tint, lv_color_hex(0xBA68C8), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(tint, 70, LV_PART_MAIN);
         lv_obj_set_style_radius(tint, 8, LV_PART_MAIN);
         lv_obj_clear_flag(tint, LV_OBJ_FLAG_SCROLLABLE);
@@ -202,7 +202,7 @@ static void build_day_cell(lv_obj_t *parent, int day, int row, int col,
     lv_color_t color;
     if (is_today)                       color = C_BG_PRIMARY;                /* navy on cyan */
     else if (is_wanphra && !is_holiday) color = lv_color_hex(0xFFEB3B);      /* bright yellow */
-    else if (is_holiday)                color = lv_color_hex(0xFFA726);      /* amber on tint */
+    else if (is_holiday)                color = lv_color_hex(0xE1BEE7);      /* light lilac on purple tint — readable contrast */
     else if (col == 0 || col == 6)      color = lv_color_hex(0xFF7A8C);      /* weekend pink */
     else                                color = C_TEXT_PRIMARY;              /* weekday white */
     lv_obj_set_style_text_color(lbl, color, LV_PART_MAIN);
@@ -214,10 +214,15 @@ static void build_day_cell(lv_obj_t *parent, int day, int row, int col,
         lv_obj_center(lbl);
     }
 
-    /* Wanphra circle (yellow dot below the number) — only for regular
-     * วันพระ days that aren't also a national holiday. Today still gets
-     * the dot since the cyan box covers only the number area. */
-    if (is_wanphra && !is_holiday) {
+    /* Wanphra circle (yellow dot below the number) — Phase 2.2.5q: now
+     * shown on EVERY วันพระ day, including today and major Buddhist
+     * national holidays. On a today-cell the circle overlaps the cyan
+     * highlight box at the bottom — yellow on cyan is high contrast and
+     * communicates "today is also วันพระ" visibly. When the day is a
+     * national holiday the circle sits above the Thai holiday label;
+     * otherwise it's centred at the bottom of the cell. */
+    if (is_wanphra) {
+        int circle_y_off = is_holiday ? -22 : -8;   /* above label vs centred bottom */
         lv_obj_t *circle = lv_obj_create(cell);
         lv_obj_remove_style_all(circle);
         lv_obj_set_size(circle, 12, 12);
@@ -226,7 +231,7 @@ static void build_day_cell(lv_obj_t *parent, int day, int row, int col,
         lv_obj_set_style_radius(circle, 6, LV_PART_MAIN);
         lv_obj_clear_flag(circle, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_clear_flag(circle, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_align(circle, LV_ALIGN_BOTTOM_MID, 0, -8);
+        lv_obj_align(circle, LV_ALIGN_BOTTOM_MID, 0, circle_y_off);
     }
 
     /* Holiday name label below the number — Thai text scaled small.
@@ -354,12 +359,19 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
         lv_label_set_text(dow, THAI_WEEKDAY_SHORT[i]);
         lv_obj_set_style_text_color(dow, lv_color_hex(DOW_COLORS[i]), LV_PART_MAIN);
         lv_obj_set_style_text_font(dow, &thai_sarabun_stacked_24, LV_PART_MAIN);
-        /* Phase 2.2.5j — geometric centre with a -10 px y-offset so the
-         * Thai labels look centred (tone marks pull the perceived centre
-         * lower than the bbox centre when transform_scale is applied). */
+        /* Phase 2.2.5n — Lek's insight: day NUMBERS centre perfectly
+         * with lv_obj_center because they have no transform_scale; the
+         * Thai DOW characters were drifting because LVGL's default
+         * transform pivot is the widget's top-left, so scale-up
+         * expanded the visual down-and-right. Pinning the pivot to the
+         * bbox centre (50%/50%) makes the scaled visual stay centred
+         * on the bbox centre, so lv_obj_center then works the same as
+         * for the (un-scaled) day numbers. No more empirical y-offset. */
         lv_obj_set_style_transform_scale_x(dow, 717, LV_PART_MAIN);  /* 2.8x */
         lv_obj_set_style_transform_scale_y(dow, 717, LV_PART_MAIN);
-        lv_obj_align(dow, LV_ALIGN_CENTER, 0, -10);
+        lv_obj_set_style_transform_pivot_x(dow, lv_pct(50), LV_PART_MAIN);
+        lv_obj_set_style_transform_pivot_y(dow, lv_pct(50), LV_PART_MAIN);
+        lv_obj_center(dow);
     }
 
     /* ── Day cells ── */
@@ -402,10 +414,7 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
         add_hline(card, grid_left, y, grid_width);
     }
 
-    /* ── Legend (bottom) ── */
-    lv_obj_t *legend = lv_label_create(card);
-    lv_label_set_text(legend, "[*] today    [.] event    [.] holiday");
-    lv_obj_set_style_text_color(legend, C_TEXT_HINT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(legend, &lv_font_montserrat_18, LV_PART_MAIN);
-    lv_obj_align(legend, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    /* Phase 2.2.5p — production cleanup: dropped the "[*] today  [.] event
+     * [.] holiday" legend. Day-cell colour + circle + label coding is
+     * now self-explanatory; the legend was dead inventory. */
 }

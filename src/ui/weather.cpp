@@ -45,12 +45,9 @@ extern "C" void weather_build(lv_obj_t *parent, int x, int y, int w, int h)
     lv_obj_set_style_text_font(city, &thai_sarabun_stacked_24, LV_PART_MAIN);
     lv_obj_align(city, LV_ALIGN_TOP_LEFT, 0, 0);
 
-    /* Dev marker (top-right) — reminds reader the values are static */
-    lv_obj_t *stub = lv_label_create(card);
-    lv_label_set_text(stub, "(stub - Phase 2.2.7-NET)");
-    lv_obj_set_style_text_color(stub, C_TEXT_HINT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(stub, &lv_font_montserrat_14, LV_PART_MAIN);
-    lv_obj_align(stub, LV_ALIGN_TOP_RIGHT, 0, 0);
+    /* (Phase 2.2.5l: removed the "(stub - Phase 2.2.7-NET)" dev marker
+     * from the top-right. The stub status is captured in the commit
+     * history / PROJECT_CONTEXT.md instead of cluttering the UI.) */
 
     /* Temperature value (centre, large) — Montserrat handles digits well */
     lv_obj_t *temp_value = lv_label_create(card);

@@ -143,10 +143,7 @@ extern "C" void build_foundation_ui(void)
     /* ── Upcoming holidays card (right column, bottom) ── */
     upcoming_build(scr, UPCOMING_X, UPCOMING_Y, UPCOMING_W, UPCOMING_H);
 
-    /* ── Phase marker (bottom-left, faint) ── */
-    lv_obj_t *subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle, "Phase 2.2.5d - widget bigger + grid + weather stub");
-    lv_obj_set_style_text_color(subtitle, C_TEXT_HINT, LV_PART_MAIN);
-    lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(subtitle, LV_ALIGN_BOTTOM_LEFT, EDGE_MARGIN_L, -16);
+    /* Phase 2.2.5p — production cleanup: dropped the bottom-left
+     * "Phase 2.2.x ..." dev marker. Phase tracking lives in git +
+     * PROJECT_CONTEXT.md instead. */
 }
