@@ -1,0 +1,13 @@
+[Unit]
+Description=Schedule monitor off every day at 19:00 (Thailand time)
+
+[Timer]
+# 19:00 every day. Local time (the Pi runs in Asia/Bangkok).
+OnCalendar=*-*-* 19:00:00
+# If the Pi was off / suspended at the trigger time, run the missed
+# event on next boot so the display goes off even if 19:00 was missed.
+Persistent=true
+Unit=calendar-screen-off.service
+
+[Install]
+WantedBy=timers.target

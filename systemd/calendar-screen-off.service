@@ -1,0 +1,15 @@
+[Unit]
+Description=Calendar wall display - turn monitor off at night (DDC/CI)
+Documentation=https://github.com/thanatvipulakorn-arch/digital_calendar_pi
+
+[Service]
+Type=oneshot
+# Ensure i2c-dev kernel module is loaded so ddcutil can talk to the
+# monitor. Cheap if it's already loaded.
+ExecStartPre=/sbin/modprobe i2c-dev
+# VCP D6 = Power Mode. Value 04 = "DPM Off" — fully powers the
+# monitor down (lowest power state). The Samsung Odyssey G3 closes
+# its DDC bus when entering this state, so there is NO wake-on-DDC
+# command — the user wakes the monitor manually with the power
+# button. See systemd/README.md for the full story.
+ExecStart=/usr/bin/ddcutil setvcp D6 04

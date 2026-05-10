@@ -1,7 +1,7 @@
 ﻿# Digital Calendar Pi — Project Context
 
 > **Single source of truth** for the Pi Zero W Digital Calendar project.
-> Last updated: **May 10, 2026** — Post-ship: SIGUSR1 manual redraw + console-overdraw fix (2.2.5z) and mini-cal title at native 72 px (2.2.5z2).
+> Last updated: **May 10, 2026** — Post-ship: SIGUSR1 manual redraw + console-overdraw fix (2.2.5z), mini-cal title at native 72 px (2.2.5z2), header branding + relocated date stack + green tint (2.2.5z3), scheduled night off via DDC/CI (2.2.5z4).
 
 ---
 
@@ -74,6 +74,10 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 │                                         src/assets/thai_sarabun_<size>.c)
 ├── fonts/
 │   └── Sarabun-Regular.ttf              (Google Fonts source, ~90 KB)
+├── systemd/                             (Phase 2.2.5z4 — scheduled monitor off
+│   ├── calendar-screen-off.service       at 19:00 via DDC/CI; wake is manual)
+│   ├── calendar-screen-off.timer
+│   └── README.md
 │
 ├── src/
 │   ├── main.c                           (modified template entry point)
@@ -147,6 +151,8 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 | **2.2.5s** WiFi indicator + clock centring | DONE | May 9 | Same `transform_pivot 50/50` fix from 2.2.5n applied to the clock. WiFi indicator now uses `lv_label_set_recolor` with inline `#RRGGBB ...#` so `LV_SYMBOL_WIFI` is green when associated, red when offline. SSID query switched from iwgetid (not on Trixie) to nmcli. |
 | **2.2.5z** SIGUSR1 manual redraw + IP.issue clear | DONE | May 10 | Two-part fix for the **agetty/console-overdraw bug** (when WiFi association flaps, `agetty --reload` re-renders `/etc/issue` + `/etc/issue.d/*` onto the framebuffer, overwriting the LVGL UI; LVGL doesn't repaint because nothing is dirty). **(1) Root-cause prevention:** `/etc/issue.d/IP.issue` (owned by `raspberrypi-sys-mods`, content `My IP address is \4 \6`) was the trigger source — agetty re-renders the banner on every IP state change. Cleared its contents to 0 bytes via `sudo truncate -s 0`; backup at `/etc/IP.issue.bak.20260510` (moved OUT of `/etc/issue.d/` because agetty on Trixie reads every file in that dir, not just `*.issue` — see §9 gotcha). **(2) Escape hatch:** added `signal(SIGUSR1, ...)` → sets `sig_atomic_t` flag → a 100 ms `lv_timer` picks it up on the LVGL thread and calls `lv_obj_invalidate(lv_screen_active())`. Pi aliases `calredraw` (soft, ~16 ms) and `calreset` (hard restart). End-to-end stress-tested: unplug network → no banner overdraw. |
 | **2.2.5z2** Mini-cal title at native 72 px | DONE | May 10 | Title "พฤษภาคม 2569" was previously rendered with `thai_sarabun_stacked_24` + `transform_scale 3.0x` to match the header clock height — produced visibly aliased glyph edges (LVGL stretches bitmap fonts with no antialiasing on the upscale). Generated `thai_sarabun_72.c` via `lv_font_conv` from `Sarabun-Regular.ttf` (Google Fonts), 4 bpp, range 32-127 + 3584-3711 (~830 KB). Title now uses native font, no transform_scale → crisp edges. New helper `generate_fonts.ps1` documents the workflow. `MINI_TITLE_H` 60 → 100 to fit ~80 px line_height. Title alignment changed `LV_ALIGN_TOP_LEFT, 0, 0` → `LV_ALIGN_TOP_MID, 0, 4` (centred horizontally in card). Note: `lv_font_conv` ≥ 1.5 dropped `--stride` / `--align` flags from older recipes — keep `generate_fonts.ps1` minimal. |
+| **2.2.5z3** Header branding + relocated date stack + green holiday tint | DONE | May 10 | Three small tweaks driven by Lek visiting the wall display: (1) Generated `thai_sarabun_48.c` (~395 KB native 48 px) for the company branding. (2) Header bar reshuffled — weekday/date/lunar stack moved into the mini calendar's title row (left side); the vacated header slot now hosts "บริษัท เลเซอร์เอ็นจิเนียร์ จำกัด" in Material red 600 (#E53935) at native 48 px (72 px overflowed into the centred clock). (3) Holiday cells: tint colour swapped purple #BA68C8 → light green #A5D6A7 (Material Green 200), opa 70 → 153 (~60%) — the soft green pastel now reads as a subtle highlight against the tulip foliage without dominating. |
+| **2.2.5z4** Scheduled monitor off at night | DONE | May 10 | systemd timer fires 19:00 daily; service runs `ddcutil setvcp D6 04` (DPM Off) via DDC/CI on `/dev/i2c-2`. The user wakes the monitor in the morning with the power button. **Wake-on-DDC is not possible on this Samsung Odyssey G3 (LS27AG32x)** — see §9 lesson. Setup lives in `systemd/calendar-screen-off.{service,timer}` plus `systemd/README.md`. New Pi-side dependency: `apt install ddcutil`. The service auto-loads `i2c-dev` via `ExecStartPre=/sbin/modprobe`. `Persistent=true` on the timer catches a missed 19:00 if the Pi was offline. |
 | **2.2.6** Header | DONE | May 9 | `header.{h,cpp}` — weekday/date/lunar/clock/wanphra. 1 Hz lv_timer in main.c → `header_tick()` updates clock per-second, others on day_changed. |
 | 2.2.7 Weather card (NET) | PENDING (Batch B) | — | Replace stub with libcurl + cJSON Open-Meteo client + 5-min refresh on lv_timer in worker thread |
 | **2.2.8** Upcoming holidays | DONE | May 9 | `upcoming.{h,cpp}` — scans 90 days via `thai_calendar_*`, sorts ascending, shows up to 5 with offset chip. Snapshot at build (no midnight refresh yet). |
@@ -386,6 +392,63 @@ in a completely unrelated path. Same caution applies to
 `/etc/cron.d/`, `/etc/profile.d/`, `/etc/rsyslog.d/`, `/etc/sudoers.d/`,
 `/etc/network/if-up.d/`, etc — any `*.d/` style include directory.
 
+### Phase 2.2.5z4 lesson (May 10) — display sleep on Pi+KMS+gaming-monitor
+
+**Goal:** schedule the wall display to sleep at night and wake in the
+morning, with `lvglsim` running the whole time.
+
+**What was tried (failure tree):**
+
+1. **`vcgencmd display_power 0`** — legacy firmware mailbox call.
+   Silently no-op on the `vc4-kms-v3d` driver (Pi Zero W on Trixie).
+   Exit success, `display_power=1` after the call. Removed in modern
+   firmware/KMS path.
+2. **`echo Off > /sys/class/drm/card0-HDMI-A-1/dpms`** — kernel rejects
+   the write while KMS owns the connector (`Permission denied` even
+   under `sudo tee`).
+3. **HDMI-CEC** — installed `cec-utils`, added `dtoverlay=cec` to
+   `/boot/firmware/config.txt`, rebooted. `cec-client -l` showed `/dev/cec0`
+   as expected. `echo "scan" | cec-client -s -d 1` returned only the Pi's
+   own libCEC tester device (logical address 0 = TV) — no response. The
+   monitor is a **Samsung Odyssey G3 (LS27AG32x)** computer monitor, not
+   a TV — does not implement CEC.
+4. **DDC/CI `setvcp D6 04` (DPM Off)** — works for the off direction.
+   `ddcutil` was already proven by `ddcutil detect` finding the monitor
+   on `/dev/i2c-2` and `capabilities` listing VCP D6 with values `01`
+   (on) and `04` (off). But sending `D6 01` after the off command
+   returns `Display not found` because the monitor closes its DDC
+   controller when it powers down — DDC bus is dead until the user
+   wakes the monitor by other means.
+5. **DDC/CI `setvcp D6 02`** (undocumented value) — same result: monitor
+   sleeps, DDC bus closes, `D6 01` fails.
+6. **DDC/CI `--maxtries=20,10,10 setvcp D6 01`** — retry flood doesn't
+   wake the I2C controller while the monitor is in DPM Off.
+
+**Outcome:** Auto-wake is impossible on this monitor without external
+hardware. Lek picked the realistic compromise: **auto off at 19:00,
+manual wake with the power button in the morning.** Implemented in
+`systemd/calendar-screen-off.{service,timer}`. There is no `-on`
+counterpart.
+
+**Notes for future me:**
+- HDMI hotplug cycling via libdrm (Pi forces `drmModeSetCrtc(... 0)` then
+  re-sets the mode) **would** wake the monitor by faking a new signal —
+  but `lvglsim` uses LVGL's FBDEV backend, so the kernel's `vc4` module
+  holds DRM master and the C tool can't `drmSetMaster`. Switching the
+  LVGL backend to `lib/display_backends/drm.c` would make `lvglsim`
+  itself the master and fix this — but that's a meaningful refactor.
+- Smart-plug power cycling (TP-Link Kasa, Sonoff) is the cleanest fix
+  if Lek decides he wants the auto-wake later.
+- ddcutil emits `Unexpected architecture armv6l` and `Unable to determine
+  dynamic sleep cache file name` warnings on Pi Zero W. Cosmetic only —
+  the VCP write succeeds. Don't waste time chasing them.
+
+**Cleanup left in place after the session:**
+- `cec-utils` package — kept (~few MB, harmless).
+- `dtoverlay=cec` line in `/boot/firmware/config.txt` — kept (no
+  meaningful effect with no CEC traffic).
+- `ddcutil` package — kept (used by the off-service).
+
 ### Phase 2.2.5z2 lesson (May 10) — bitmap fonts don't scale cleanly
 
 **What was tried:** Use the existing 24 px `thai_sarabun_stacked_24` for
@@ -565,3 +628,4 @@ If anything is off, iterate (~30-60 sec build cycle thanks to ccache + sync v2).
 - **2026-05-10 (2.2.5z, Option A)** — Cleared `/etc/issue.d/IP.issue` (truncate to 0 bytes, backup `IP.issue.bak.20260510`) instead of deleting. Reasoning: `raspberrypi-sys-mods` owns the file as a conffile; deleting risks recreation on apt upgrade. Truncating preserves the dpkg ownership — on upgrade, dpkg sees a modified conffile and prompts the user (default keep). This is the trigger-source fix complementing the SIGUSR1 escape hatch. Did NOT trigger `agetty --reload` after the change to avoid disturbing the running UI; effect kicks in on the next natural network event (DHCP renewal, WiFi flap, reboot).
 - **2026-05-10** — `Permission denied` at ssh socket connect is **Windows-local** (EACCES from WFP/firewall), not AP isolation. Always check `Get-NetAdapter` for active VPN tunnels before assuming network-layer block. Added to PROJECT_CONTEXT §9.
 - **2026-05-10 (2.2.5z2)** — For Thai labels above ~1.4x scale, generate a native-size font via `lv_font_conv` instead of using `transform_scale`. Bitmap glyph upscale produces aliased edges; native rasterisation does not. Standard workflow now lives in `generate_fonts.ps1`; the ~830 KB binary cost per size is acceptable on the Pi Zero W's 64 GB SD. FreeType (runtime vector) deferred until we have multiple sizes worth managing dynamically.
+- **2026-05-10 (2.2.5z4)** — Display sleep schedule: auto-off-only via DDC/CI, manual wake with the power button. Auto-wake is not possible on the Samsung Odyssey G3 because the monitor's DDC bus closes when it powers down (no `setvcp D6 01` after `D6 04`). HDMI-CEC ruled out (gaming monitor, not a TV). Smart-plug power cycling and a DRM-backend LVGL refactor were the only realistic full-auto paths; both deferred. See PROJECT_CONTEXT §9 for the full failure tree before re-attempting.
