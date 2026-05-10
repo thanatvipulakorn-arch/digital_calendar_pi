@@ -1,7 +1,7 @@
 ﻿# Digital Calendar Pi — Project Context
 
 > **Single source of truth** for the Pi Zero W Digital Calendar project.
-> Last updated: **May 9, 2026** — Phase 2.2.5x complete, project shipped (v1.0.0).
+> Last updated: **May 10, 2026** — Post-ship: SIGUSR1 manual redraw + console-overdraw fix (2.2.5z) and mini-cal title at native 72 px (2.2.5z2).
 
 ---
 
@@ -64,11 +64,16 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 │                                         for future AI sessions: ccache rule, sync
 │                                         v2, network failure tree, LVGL 9 idioms,
 │                                         Thai stacked-font rule)
-├── CMakeLists.txt                       (433 lines — lv_port_linux template + our additions)
+├── CMakeLists.txt                       (~435 lines — lv_port_linux template + our additions)
 ├── lv_conf.defaults                     (85 lines — LVGL config, KEEP AS-IS)
 ├── README.md                            (template README)
 ├── sync_to_pi.ps1                       (sync helper, scans + scp all source)
 ├── build_pi.ps1                         (build helper, tmux + cmake + make)
+├── generate_fonts.ps1                   (Phase 2.2.5z2 — runs lv_font_conv against
+│                                         fonts/Sarabun-Regular.ttf to produce
+│                                         src/assets/thai_sarabun_<size>.c)
+├── fonts/
+│   └── Sarabun-Regular.ttf              (Google Fonts source, ~90 KB)
 │
 ├── src/
 │   ├── main.c                           (modified template entry point)
@@ -140,6 +145,8 @@ D:\MY WORK\RASPBERRY PI PROJECT\         (Windows local, primary edit location)
 | **2.2.5q** Wanphra circle on today | DONE | May 9 | Today + wanphra (May 9) was missing the yellow circle because of the `!is_today` guard; relaxed to always show the circle on wanphra. Yellow on cyan is fine visually. |
 | **2.2.5r** WiFi label visibility | DONE | May 9 | Slate-grey 14 px was invisible on translucent navy + tulip; bumped to white / 18 px and moved from y=64 to y=90 below the scaled clock visual. |
 | **2.2.5s** WiFi indicator + clock centring | DONE | May 9 | Same `transform_pivot 50/50` fix from 2.2.5n applied to the clock. WiFi indicator now uses `lv_label_set_recolor` with inline `#RRGGBB ...#` so `LV_SYMBOL_WIFI` is green when associated, red when offline. SSID query switched from iwgetid (not on Trixie) to nmcli. |
+| **2.2.5z** SIGUSR1 manual redraw + IP.issue clear | DONE | May 10 | Two-part fix for the **agetty/console-overdraw bug** (when WiFi association flaps, `agetty --reload` re-renders `/etc/issue` + `/etc/issue.d/*` onto the framebuffer, overwriting the LVGL UI; LVGL doesn't repaint because nothing is dirty). **(1) Root-cause prevention:** `/etc/issue.d/IP.issue` (owned by `raspberrypi-sys-mods`, content `My IP address is \4 \6`) was the trigger source — agetty re-renders the banner on every IP state change. Cleared its contents to 0 bytes via `sudo truncate -s 0`; backup at `/etc/IP.issue.bak.20260510` (moved OUT of `/etc/issue.d/` because agetty on Trixie reads every file in that dir, not just `*.issue` — see §9 gotcha). **(2) Escape hatch:** added `signal(SIGUSR1, ...)` → sets `sig_atomic_t` flag → a 100 ms `lv_timer` picks it up on the LVGL thread and calls `lv_obj_invalidate(lv_screen_active())`. Pi aliases `calredraw` (soft, ~16 ms) and `calreset` (hard restart). End-to-end stress-tested: unplug network → no banner overdraw. |
+| **2.2.5z2** Mini-cal title at native 72 px | DONE | May 10 | Title "พฤษภาคม 2569" was previously rendered with `thai_sarabun_stacked_24` + `transform_scale 3.0x` to match the header clock height — produced visibly aliased glyph edges (LVGL stretches bitmap fonts with no antialiasing on the upscale). Generated `thai_sarabun_72.c` via `lv_font_conv` from `Sarabun-Regular.ttf` (Google Fonts), 4 bpp, range 32-127 + 3584-3711 (~830 KB). Title now uses native font, no transform_scale → crisp edges. New helper `generate_fonts.ps1` documents the workflow. `MINI_TITLE_H` 60 → 100 to fit ~80 px line_height. Title alignment changed `LV_ALIGN_TOP_LEFT, 0, 0` → `LV_ALIGN_TOP_MID, 0, 4` (centred horizontally in card). Note: `lv_font_conv` ≥ 1.5 dropped `--stride` / `--align` flags from older recipes — keep `generate_fonts.ps1` minimal. |
 | **2.2.6** Header | DONE | May 9 | `header.{h,cpp}` — weekday/date/lunar/clock/wanphra. 1 Hz lv_timer in main.c → `header_tick()` updates clock per-second, others on day_changed. |
 | 2.2.7 Weather card (NET) | PENDING (Batch B) | — | Replace stub with libcurl + cJSON Open-Meteo client + 5-min refresh on lv_timer in worker thread |
 | **2.2.8** Upcoming holidays | DONE | May 9 | `upcoming.{h,cpp}` — scans 90 days via `thai_calendar_*`, sorts ascending, shows up to 5 with offset chip. Snapshot at build (no midnight refresh yet). |
@@ -209,7 +216,15 @@ bye                          # sudo shutdown -h now
 alias cal='cd ~/digital_calendar_pi/build && ./bin/lvglsim'
 alias bye='sudo shutdown -h now'
 alias calhealth='vcgencmd get_throttled; vcgencmd measure_temp; uptime'
+
+# Phase 2.2.5z manual UI recovery (console-overdraw bug)
+alias calredraw='kill -USR1 $(pgrep -x lvglsim) && echo redraw signal sent'
+alias calreset='tmux kill-session -t app 2>/dev/null; pkill -9 lvglsim 2>/dev/null; sleep 1; cd ~/digital_calendar_pi/build && tmux new-session -d -s app "./bin/lvglsim 2>&1 | tee /tmp/lvg.log" && echo lvglsim restarted'
 ```
+
+**When to use which:**
+- `calredraw` — first try. ~16 ms repaint via SIGUSR1, no downtime, no re-init.
+- `calreset` — fallback if `calredraw` didn't recover the screen (e.g. lvglsim crashed). 1-2 sec downtime, full re-init.
 
 ---
 
@@ -290,6 +305,122 @@ to rule out):**
 **What actually worked:** USB OTG → RJ45 adapter on the Pi, plug Ethernet
 into the home router. Pi got a separate IP on `eth0` (192.168.1.107),
 ssh worked first try. Wireless layer fully bypassed.
+
+### Phase 2.2.5z lessons (May 10) — `Permission denied` ≠ AP isolation
+
+The post-ship session bumped into the same "ssh fails from home" problem
+**but the root cause was different**, and the false hypothesis cost ~10 min
+of misdirection. Captured so future sessions don't repeat it.
+
+**Symptom:** `ssh: connect to host 192.168.1.107 port 22: Permission denied`
+from PowerShell *and* Bash on Windows host (192.168.1.104), even after
+plugging in the USB Ethernet adapter that fixed the May 9 issue. Initial
+hypothesis was "AP isolation again" — wrong.
+
+**Diagnostic clue:** The error string matters. AP isolation typically gives
+`Connection timed out` or `Connection refused` (TCP-level / network-layer
+block). `Permission denied` at socket connect is `EACCES` — that's a
+**Windows-local block**, returned by the kernel before the packet ever
+hits the network. Source: WFP (Windows Filtering Platform) rule.
+
+**Root cause:** ProtonVPN was running with killswitch enabled. Its WFP rule
+blocks all non-VPN traffic; LAN destinations (192.168.1.0/24) get EACCES.
+Confirmed via `Get-NetAdapter | Where-Object Status -eq 'Up'` showing
+`ProtonVPN  WireGuard Tunnel  Up`.
+
+**Why one early SSH attempt succeeded:** the very first ssh of the session
+went through before the ProtonVPN client finished re-asserting its
+killswitch policy after a network change (USB Ethernet plug-in event
+likely caused the VPN client to re-evaluate). Once the firewall ruleset
+settled, every subsequent attempt was blocked.
+
+**Fix:** Either disconnect ProtonVPN, OR enable "Allow LAN connections" in
+ProtonVPN settings (Settings → Connection → Allow LAN). Killswitch stays
+enabled; LAN traffic is exempted. Preferred: Allow LAN.
+
+**New diagnostic flow (in priority order before sshing into the Pi from
+Windows):**
+1. `Get-NetAdapter | Where-Object Status -eq 'Up'` — look for VPN/TUN/TAP
+   adapters. If a VPN tunnel is Up, **diagnose the VPN before the network**.
+2. If error is `Permission denied` (EACCES) → Windows firewall / VPN
+   killswitch. Network-layer is fine.
+3. If error is `Connection timed out` → network-layer (AP isolation,
+   firewall on the path, Pi sshd down).
+4. If error is `Connection refused` → host reachable but TCP/22 not
+   listening (sshd disabled — `sudo raspi-config nonint do_ssh 0`).
+
+**Decisions captured:**
+- The Bash tool inside Claude Code on Windows uses the host's OpenSSH
+  client and shares the same WFP rules — Bash isn't a "bypass" of VPN
+  killswitch. The single early success was timing, not architecture.
+- Reading PROJECT_CONTEXT §9 ahead of debugging would have prompted a
+  VPN check before plugging in Ethernet. Section 9 already mentioned
+  ProtonVPN as a contributor — keep this near the top of the failure
+  tree on future home sessions.
+
+### Phase 2.2.5z gotcha (May 10) — backup files inside `/etc/issue.d/`
+
+**What was tried:** When clearing `/etc/issue.d/IP.issue`, the backup was
+placed alongside it as `/etc/issue.d/IP.issue.bak.20260510` — same
+directory, different filename suffix.
+
+**What happened:** The Pi's `agetty` (Trixie / util-linux) appeared to
+read **all** files in `/etc/issue.d/`, not just those matching `*.issue`.
+The backup still contained `My IP address is \4 \6`, so `agetty --reload`
+events kept re-rendering the original banner content. The "fix" looked
+broken until a stress-test (unplug Ethernet) showed full-screen overdraw
+with the same content as before.
+
+**Root cause:** Default agetty manpage says it aggregates `*.issue`
+files, but the actual implementation on this OS reads everything in
+the directory regardless of suffix. Don't rely on the suffix filter.
+
+**Fix:** Move the backup OUT of `/etc/issue.d/` entirely — e.g. to
+`/etc/IP.issue.bak.<date>` or `~thanat/IP.issue.bak.<date>`. After moving,
+the next agetty reload renders only `/etc/issue` + the empty
+`IP.issue` → banner has no IP line.
+
+**Lesson:** When neutralising a config file by truncation, **never put
+the backup in the same scanned directory.** Save it one level up, or
+in a completely unrelated path. Same caution applies to
+`/etc/cron.d/`, `/etc/profile.d/`, `/etc/rsyslog.d/`, `/etc/sudoers.d/`,
+`/etc/network/if-up.d/`, etc — any `*.d/` style include directory.
+
+### Phase 2.2.5z2 lesson (May 10) — bitmap fonts don't scale cleanly
+
+**What was tried:** Use the existing 24 px `thai_sarabun_stacked_24` for
+the mini-calendar title and rely on `transform_scale_x/y = 768` (3.0x) to
+reach the visual height of the header clock.
+
+**What happened:** Edges came out visibly stair-stepped / aliased. LVGL's
+bitmap stretch is a nearest-neighbour-style upscale of pre-rasterised
+glyphs — there is no on-the-fly antialiasing, so a 3x scale shows the
+underlying 24 px grain.
+
+**Root cause:** `lv_obj_set_style_transform_scale_*` is fine for icons
+(LVGL re-rasterises vector primitives) but not for bitmap glyph data.
+At 3.0x, every original pixel becomes a 3×3 block — small chunks of
+identical anti-aliased grey shade tile uncomfortably.
+
+**Fix:** Generate the font at the actual target size with
+`lv_font_conv`. Native 72 px Sarabun produced crisp edges immediately;
+no LVGL behaviour change, just better source data. Cost: extra ~830 KB
+in the binary per font size, plus one CMakeLists edit and a full LVGL
+relink (~5 min with ccache populated).
+
+**Decisions captured:**
+- Don't scale Thai labels above ~1.4x. If a bigger size is needed,
+  generate the font (`generate_fonts.ps1 -Sizes 48,72,...`).
+- Latin/Montserrat scaling is more forgiving (the digit glyphs are
+  larger and have less fine detail) — the header clock at 1.5x/1.8x
+  still looks OK. Re-evaluate if it ever looks bad on a different
+  display.
+- `lv_font_conv` 1.5 dropped `--stride` / `--align`. The original
+  `thai_sarabun_24.c`'s `Opts:` comment is from an older toolchain;
+  don't copy those flags forward.
+- FreeType (`LV_USE_FREETYPE`) was considered — would make font sizing
+  dynamic — but rebuilds the whole LVGL config (~50 min) and inflates
+  the binary further. Defer until we have ≥ 3 font sizes to manage.
 
 **Decisions captured:**
 - For home builds: use Ethernet via USB-OTG adapter. WiFi is unreliable.
@@ -430,3 +561,7 @@ If anything is off, iterate (~30-60 sec build cycle thanks to ccache + sync v2).
 - **2026-05-09 (2.2.5d)** — **ccache + CMAKE_BUILD_TYPE pin** adopted as a permanent fixture. Cuts CMakeLists-touching rebuilds from 70 min → 3-5 min. Trade-off: first build with ccache empty still takes ~70 min, but only once.
 - **2026-05-09 (2.2.5d)** — `sync_to_pi.ps1` v2 (checksum-aware) committed. Skip-if-MD5-matches; never regress to v1. Verified at end-to-end: 39/40 files skipped on a no-op sync, full rebuild dropped from 60 min to 18 sec.
 - **2026-05-09 (2.2.5d)** — Captured the day's lessons in `.claude/skills/pi-lvgl-build-workflow/SKILL.md` so the next AI session inherits all the workflow gotchas (ccache mandate, sync v2, network failure tree, LVGL 9 idioms, Thai stacked-font rule).
+- **2026-05-10 (2.2.5z)** — Manual redraw via SIGUSR1 chosen over kiosk-mode root-cause fix (cmdline.txt + getty disable) for the console-overdraw bug. Reasoning: kiosk mode requires a reboot test cycle and changes boot behaviour (loses local tty1 login as recovery path); SIGUSR1 is additive — costs nothing, breaks nothing, and doubles as a debug tool. Root-cause fix can still be done later if console overdraw turns out to be more frequent than expected.
+- **2026-05-10 (2.2.5z, Option A)** — Cleared `/etc/issue.d/IP.issue` (truncate to 0 bytes, backup `IP.issue.bak.20260510`) instead of deleting. Reasoning: `raspberrypi-sys-mods` owns the file as a conffile; deleting risks recreation on apt upgrade. Truncating preserves the dpkg ownership — on upgrade, dpkg sees a modified conffile and prompts the user (default keep). This is the trigger-source fix complementing the SIGUSR1 escape hatch. Did NOT trigger `agetty --reload` after the change to avoid disturbing the running UI; effect kicks in on the next natural network event (DHCP renewal, WiFi flap, reboot).
+- **2026-05-10** — `Permission denied` at ssh socket connect is **Windows-local** (EACCES from WFP/firewall), not AP isolation. Always check `Get-NetAdapter` for active VPN tunnels before assuming network-layer block. Added to PROJECT_CONTEXT §9.
+- **2026-05-10 (2.2.5z2)** — For Thai labels above ~1.4x scale, generate a native-size font via `lv_font_conv` instead of using `transform_scale`. Bitmap glyph upscale produces aliased edges; native rasterisation does not. Standard workflow now lives in `generate_fonts.ps1`; the ~830 KB binary cost per size is acceptable on the Pi Zero W's 64 GB SD. FreeType (runtime vector) deferred until we have multiple sizes worth managing dynamically.

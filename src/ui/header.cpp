@@ -21,10 +21,11 @@
 #include <ctime>
 
 /* ──────────── Module-level label handles ──────────── */
+/* Phase 2.2.5z3: weekday/date/lunar moved to mini_calendar's title row;
+ * the header now hosts the company branding (left), clock+sync (centre),
+ * and wanphra indicator (right). */
 static lv_obj_t *g_bar         = nullptr;
-static lv_obj_t *g_lbl_weekday = nullptr;
-static lv_obj_t *g_lbl_date    = nullptr;
-static lv_obj_t *g_lbl_lunar   = nullptr;
+static lv_obj_t *g_lbl_brand   = nullptr;
 static lv_obj_t *g_lbl_clock   = nullptr;
 static lv_obj_t *g_lbl_sync    = nullptr;
 static lv_obj_t *g_lbl_wanphra = nullptr;
@@ -33,7 +34,6 @@ static lv_obj_t *g_dot_wanphra = nullptr;
 /* tick state */
 static int g_last_sec  = -1;
 static int g_last_yday = -1;
-static int g_last_wday = -1;
 
 /* Phase 2.2.5p — WiFi SSID cache. Refreshed every 30 ticks (~30 sec)
  * via `iwgetid -r` to keep the popen overhead off the per-second clock
@@ -80,24 +80,18 @@ extern "C" void header_build(lv_obj_t *parent, int x, int y, int w, int h)
     lv_obj_set_style_pad_all(bar, 12, LV_PART_MAIN);
     lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* ── Left column: weekday / date / lunar (stacked) ── */
-    g_lbl_weekday = lv_label_create(bar);
-    lv_label_set_text(g_lbl_weekday, "—");
-    lv_obj_set_style_text_color(g_lbl_weekday, C_TEXT_MUTED, LV_PART_MAIN);
-    lv_obj_set_style_text_font(g_lbl_weekday, &thai_sarabun_stacked_24, LV_PART_MAIN);
-    lv_obj_align(g_lbl_weekday, LV_ALIGN_TOP_LEFT, 0, 0);
-
-    g_lbl_date = lv_label_create(bar);
-    lv_label_set_text(g_lbl_date, "—");
-    lv_obj_set_style_text_color(g_lbl_date, C_TEXT_PRIMARY, LV_PART_MAIN);
-    lv_obj_set_style_text_font(g_lbl_date, &thai_sarabun_stacked_24, LV_PART_MAIN);
-    lv_obj_align(g_lbl_date, LV_ALIGN_TOP_LEFT, 0, 26);
-
-    g_lbl_lunar = lv_label_create(bar);
-    lv_label_set_text(g_lbl_lunar, "—");
-    lv_obj_set_style_text_color(g_lbl_lunar, C_TEXT_MUTED, LV_PART_MAIN);
-    lv_obj_set_style_text_font(g_lbl_lunar, &thai_sarabun_stacked_24, LV_PART_MAIN);
-    lv_obj_align(g_lbl_lunar, LV_ALIGN_TOP_LEFT, 0, 54);
+    /* ── Left: company branding ──
+     * Phase 2.2.5z3: replaces the previous weekday/date/lunar stack
+     * (those moved to the mini calendar's title row). Native 48 px
+     * Sarabun in red, vertically centred in the 130 px bar. 72 px was
+     * the first attempt but the 31-character string overflowed into
+     * the centred clock — 48 px keeps a comfortable gap. Static text,
+     * never updated by header_tick. */
+    g_lbl_brand = lv_label_create(bar);
+    lv_label_set_text(g_lbl_brand, "บริษัท เลเซอร์เอ็นจิเนียร์ จำกัด");
+    lv_obj_set_style_text_color(g_lbl_brand, lv_color_hex(0xE53935), LV_PART_MAIN);  /* Material red 600 */
+    lv_obj_set_style_text_font(g_lbl_brand, &thai_sarabun_48, LV_PART_MAIN);
+    lv_obj_align(g_lbl_brand, LV_ALIGN_LEFT_MID, 0, 0);
 
     /* ── Centre column: clock + sync status ──
      * Phase 2.2.5c: clock blown up via transform_scale because LVGL's
@@ -147,7 +141,6 @@ extern "C" void header_build(lv_obj_t *parent, int x, int y, int w, int h)
     /* Force first refresh */
     g_last_sec  = -1;
     g_last_yday = -1;
-    g_last_wday = -1;
     header_tick();
 }
 
@@ -160,12 +153,10 @@ extern "C" void header_tick(void)
     struct tm tm_local;
     localtime_r(&now, &tm_local);
 
-    bool sec_changed  = (tm_local.tm_sec  != g_last_sec);
-    bool day_changed  = (tm_local.tm_yday != g_last_yday);
-    bool wday_changed = (tm_local.tm_wday != g_last_wday);
+    bool sec_changed = (tm_local.tm_sec  != g_last_sec);
+    bool day_changed = (tm_local.tm_yday != g_last_yday);
     g_last_sec  = tm_local.tm_sec;
     g_last_yday = tm_local.tm_yday;
-    g_last_wday = tm_local.tm_wday;
 
     /* Clock — every second */
     if (g_lbl_clock && sec_changed) {
@@ -174,32 +165,10 @@ extern "C" void header_tick(void)
                       tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec);
         lv_label_set_text(g_lbl_clock, buf);
     }
-
-    /* Weekday — midnight only */
-    if (g_lbl_weekday && wday_changed) {
-        int wd = tm_local.tm_wday;
-        if (wd < 0 || wd > 6) wd = 0;
-        lv_label_set_text(g_lbl_weekday, THAI_WEEKDAY_FULL[wd]);
-    }
-
-    /* BE date — midnight only */
-    if (g_lbl_date && day_changed) {
-        int y = tm_local.tm_year + 1900 + 543;
-        int m = tm_local.tm_mon + 1;
-        int d = tm_local.tm_mday;
-        const char *mon = (m >= 1 && m <= 12) ? THAI_MONTH_FULL[m] : "";
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "%d %s %d", d, mon, y);
-        lv_label_set_text(g_lbl_date, buf);
-    }
-
-    /* Lunar — midnight only */
-    if (g_lbl_lunar && day_changed) {
-        thai_lunar_t lunar = thai_calendar_get_lunar(now);
-        char buf[96];
-        thai_calendar_format_summary_th(&lunar, buf, sizeof(buf));
-        lv_label_set_text(g_lbl_lunar, buf);
-    }
+    /* Weekday/date/lunar relocated to mini_calendar title row in
+     * Phase 2.2.5z3 — they refresh on the next mini_calendar rebuild
+     * (which is currently build-once; will hook into midnight rollover
+     * when 2.2.4-MIDNIGHT lands). */
 
     /* WiFi SSID + NTP sync — combined into one label below the clock
      * (Phase 2.2.5p). SSID is re-polled every ~30 sec since `iwgetid`

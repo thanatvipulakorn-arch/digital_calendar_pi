@@ -81,7 +81,11 @@ static cal_today_t cal_today_snapshot(void)
 #define MINI_CARD_W          1368
 #define MINI_CARD_H          832
 
-#define MINI_TITLE_H         60
+/* MINI_TITLE_H 60 → 100 in Phase 2.2.5z2: title is now native 72 px
+ * Sarabun (no transform_scale — was producing aliased edges at 3x).
+ * 100 px gives ~10 px breathing above + below the ~80 px line_height
+ * before the DOW row. */
+#define MINI_TITLE_H         100
 /* MINI_DOW_H bumped to 100 in Phase 2.2.5f. DOW transform_scale is now
  * 2.8x (effective ~67 px) and the labels are pinned to the top of the
  * cell per Lek's spec — was previously 80 px / 2.2x / centred. */
@@ -167,14 +171,23 @@ static void build_day_cell(lv_obj_t *parent, int day, int row, int col,
     lv_obj_clear_flag(cell, LV_OBJ_FLAG_CLICKABLE);
 
     /* Holiday tint (z=1, behind everything else). Skipped on today —
-     * the cyan box would cover it anyway. */
+     * the cyan box would cover it anyway. Phase 2.2.5z3: Lek asked to
+     * swap purple (#BA68C8 — was chosen in 2.2.5k to differentiate from
+     * wanphra yellow) for a softer light green. #A5D6A7 (Material
+     * Green 200) reads as a calm pastel against the tulip background
+     * without looking like the cyan today-highlight. Tint opa bumped
+     * 70 → 200 because at 27% the green pastel blended into the
+     * green tulip foliage and disappeared. Settled at 153 (~60%) — at
+     * 200 (~78%) the cells looked too dense against the rest of the
+     * card. The bump is local to the tint cell; surrounding card
+     * translucency is untouched. */
     if (is_holiday && !is_today) {
         lv_obj_t *tint = lv_obj_create(cell);
         lv_obj_remove_style_all(tint);
         lv_obj_set_size(tint, MINI_CELL_W - 4, MINI_CELL_H - 4);
         lv_obj_center(tint);
-        lv_obj_set_style_bg_color(tint, lv_color_hex(0xBA68C8), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(tint, 70, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(tint, lv_color_hex(0xA5D6A7), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(tint, 153, LV_PART_MAIN);
         lv_obj_set_style_radius(tint, 8, LV_PART_MAIN);
         lv_obj_clear_flag(tint, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_clear_flag(tint, LV_OBJ_FLAG_CLICKABLE);
@@ -295,8 +308,50 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
     lv_obj_set_style_pad_all(card, MINI_INNER_PAD, LV_PART_MAIN);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* ── Title ── */
-    /* Thai month name + Buddhist year, e.g. "พฤษภาคม 2569" */
+    /* ── Title row: weekday/date/lunar (left) + month-year (centre) ──
+     * Phase 2.2.5z3: weekday/date/lunar moved here from the header bar
+     * (per Lek's request). Same three labels, same font, same colours
+     * as the previous header layout — placed in the empty space to the
+     * left of the month-year title. The header bar now hosts the
+     * company branding instead. Snapshot is taken at build time, same
+     * as the rest of the mini calendar — refreshed on midnight rebuild. */
+    time_t now_t = time(NULL);
+    struct tm tm_local;
+    localtime_r(&now_t, &tm_local);
+
+    /* Weekday (Thai full, e.g. "วันอาทิตย์") */
+    lv_obj_t *lbl_weekday = lv_label_create(card);
+    int wd = tm_local.tm_wday;
+    if (wd < 0 || wd > 6) wd = 0;
+    lv_label_set_text(lbl_weekday, THAI_WEEKDAY_FULL[wd]);
+    lv_obj_set_style_text_color(lbl_weekday, C_TEXT_MUTED, LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl_weekday, &thai_sarabun_stacked_24, LV_PART_MAIN);
+    lv_obj_align(lbl_weekday, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    /* Date BE — "10 พฤษภาคม 2569" */
+    lv_obj_t *lbl_date = lv_label_create(card);
+    char date_buf[64];
+    snprintf(date_buf, sizeof(date_buf), "%d %s %d",
+             td.today, THAI_MONTH_FULL[td.month], td.year_be);
+    lv_label_set_text(lbl_date, date_buf);
+    lv_obj_set_style_text_color(lbl_date, C_TEXT_PRIMARY, LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl_date, &thai_sarabun_stacked_24, LV_PART_MAIN);
+    lv_obj_align(lbl_date, LV_ALIGN_TOP_LEFT, 0, 26);
+
+    /* Lunar summary — "แรม 9 ค่ำ เดือน 6 | ปีมะเมีย" */
+    lv_obj_t *lbl_lunar = lv_label_create(card);
+    thai_lunar_t lunar = thai_calendar_get_lunar(now_t);
+    char lunar_buf[96];
+    thai_calendar_format_summary_th(&lunar, lunar_buf, sizeof(lunar_buf));
+    lv_label_set_text(lbl_lunar, lunar_buf);
+    lv_obj_set_style_text_color(lbl_lunar, C_TEXT_MUTED, LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl_lunar, &thai_sarabun_stacked_24, LV_PART_MAIN);
+    lv_obj_align(lbl_lunar, LV_ALIGN_TOP_LEFT, 0, 54);
+
+    /* Month-year title — native 72 px Sarabun, centred horizontally.
+     * Phase 2.2.5z2: switched from scaled thai_sarabun_stacked_24
+     * (3.0x produced aliased edges) to the native 72 px variant
+     * generated via lv_font_conv. */
     lv_obj_t *title = lv_label_create(card);
     char title_buf[64];
     snprintf(title_buf, sizeof(title_buf), "%s %d",
@@ -304,8 +359,8 @@ extern "C" void mini_calendar_build(lv_obj_t *parent, int x, int y)
              td.year_be);
     lv_label_set_text(title, title_buf);
     lv_obj_set_style_text_color(title, C_TEXT_PRIMARY, LV_PART_MAIN);
-    lv_obj_set_style_text_font(title, &thai_sarabun_stacked_24, LV_PART_MAIN);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_set_style_text_font(title, &thai_sarabun_72, LV_PART_MAIN);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 4);
 
     /* ── Nav buttons (right side, visual only) ── */
     lv_obj_t *nav_prev = lv_label_create(card);

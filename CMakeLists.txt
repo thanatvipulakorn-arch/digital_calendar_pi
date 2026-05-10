@@ -435,6 +435,8 @@ add_executable(lvglsim
     src/calendar/thai_calendar.cpp
     src/assets/thai_sarabun_24.c
     src/assets/thai_sarabun_stacked_24.c
+    src/assets/thai_sarabun_48.c
+    src/assets/thai_sarabun_72.c
     src/assets/bg_calendar.c)
 # Phase 2.2.5d:
 #   - timer_card.* removed permanently (was a placeholder; will revisit
