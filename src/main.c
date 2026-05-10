@@ -19,6 +19,7 @@
  ******************************************************************/
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,6 +50,34 @@ static char * selected_backend;
 
 /* Global simulator settings, defined in lv_linux_backend.c */
 extern simulator_settings_t settings;
+
+/* Manual redraw escape hatch (post-2.2.5x).
+ * When agetty re-renders /etc/issue (e.g. on every IP change while
+ * WiFi is failing), it overdraws our framebuffer. LVGL won't repaint
+ * those pixels because nothing in the widget tree is dirty.
+ * Sending SIGUSR1 sets a flag; the lv_timer below picks it up on the
+ * LVGL thread and invalidates the active screen, forcing a repaint.
+ * (Signal handlers must not call LVGL APIs directly — not thread-safe
+ * and not async-signal-safe.) */
+static volatile sig_atomic_t need_redraw = 0;
+
+static void handle_redraw_signal(int sig)
+{
+    (void)sig;
+    need_redraw = 1;
+}
+
+static void redraw_check_cb(lv_timer_t *t)
+{
+    (void)t;
+    if (need_redraw) {
+        need_redraw = 0;
+        lv_obj_t *scr = lv_screen_active();
+        if (scr) {
+            lv_obj_invalidate(scr);
+        }
+    }
+}
 
 
 /**
@@ -240,6 +269,12 @@ int main(int argc, char ** argv)
      * date/lunar/wanphra on midnight rollover — see header_tick()).
      * Cheap: header_tick early-returns when nothing changed. */
     lv_timer_create(header_tick_trampoline, 1000, NULL);
+
+    /* SIGUSR1 -> screen invalidate. Manual escape hatch for the
+     * agetty/console-overdraw bug (see comment near handle_redraw_signal).
+     * Trigger: `kill -USR1 $(pgrep lvglsim)` or `calredraw` alias. */
+    signal(SIGUSR1, handle_redraw_signal);
+    lv_timer_create(redraw_check_cb, 100, NULL);
 
     /* Enter the run loop of the selected backend */
     driver_backends_run_loop();
